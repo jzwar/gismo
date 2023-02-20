@@ -37,3 +37,6 @@ CMakeFiles/
 
 #Mac OS
 **/.DS_Store
+
+# Fork specifics
+**/playground/
