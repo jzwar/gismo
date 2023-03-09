@@ -5,6 +5,35 @@ import numpy as np
 askew = True
 dx = 1e-6
 component_id = 3
+np.set_printoptions(suppress=True)
+
+# Auxiliary function
+
+
+def integrate_function(function, order=None, dim=None, interval=[0, 1]):
+    if dim is None or order is None:
+        raise ValueError()
+
+    # Get Legendre points
+    positions, weights = np.polynomial.legendre.leggauss(order)
+    positions = interval[0] + (interval[1] - interval[0]) / 2 * (positions + 1)
+    weights = weights * (interval[1] - interval[0]) / 2
+    positions = np.reshape(
+        np.meshgrid(*[positions for _ in range(dim)]),
+        (dim, -1)
+    ).T
+    weights = np.prod(
+        np.reshape(
+            np.meshgrid(*[weights for _ in range(dim)]),
+            (dim, -1)
+        ).T,
+        axis=1
+    )
+
+    # Evaluate function
+    function_values = function(positions)
+    return np.matmul(function_values.T, weights)
+
 
 if askew:
     geometry_spline = gus.Bezier(degrees=[2, 2], control_points=[
@@ -60,6 +89,33 @@ else:
     ])
 
 evaluation_point = np.array([[0.25, 0.6]])
+
+# Compute the objective function
+
+
+def target_function(x):
+    return np.sin(x[:, 1])**2
+
+
+def objective_function(x):
+    positions = np.hstack([x, np.ones(x.shape)])
+    jacs = geometry_spline.jacobian(positions)
+    measures = np.linalg.norm(jacs[:, :, 0], axis=1)
+    solution_values = solution_spline.evaluate(positions).flatten()
+    target_function_values = target_function(
+        geometry_spline.evaluate(positions))
+    return measures * (solution_values - target_function_values)**2
+
+
+obj_function_value = integrate_function(objective_function, 8, 1)
+print("Objective function evaluates to : \n", obj_function_value)
+
+# Determine the sensitivities
+solution_spline.control_points[8][0] += dx
+obj_function_value_dx = integrate_function(objective_function, 8, 1)
+derivative = (obj_function_value_dx - obj_function_value) / dx
+print("Objective function evaluates to : \n", derivative)
+solution_spline.control_points[8][0] -= dx
 
 # Geometric expressions
 jac = geometry_spline.jacobian(queries=evaluation_point)[0]
@@ -141,8 +197,12 @@ print("Comparison of values for component 3\n",
       "\n are they equal : ",
       np.allclose(dBL2_dx_fd, dBL2_dx[component_id]), "\n")
 
+print("Individual components : \n", dBL0_dx.reshape(9, 2), "\n\n")
+print("Individual components : \n", dBL1_dx.reshape(9, 18), "\n\n")
+print("Individual components : \n", dBL2_dx.flatten(), "\n\n")
 
 expr_total_0 = np.einsum("ij,jk->ik", dBL0_dx, BL1) * BL2
+expr_total_1 = np.einsum("i,jki -> jk", BL0[0], dBL1_dx) * BL2
 expr_total_2 = np.einsum("i,ij,k->jk", BL0[0], BL1, dBL2_dx)
 
 

@@ -1,28 +1,36 @@
-/** @file poisson2_example.cpp
+/** @file linear_elasticity_expressions.cpp
 
-    @brief Tutorial on how to use expression assembler to solve the Poisson
-   equation
+    @brief Linear elasticity problem with adjoint approach for sensitivity
+   analysis
 
     This file is part of the G+Smo library.
 
     This Source Code Form is subject to the terms of the Mozilla Public
     License, v. 2.0. If a copy of the MPL was not distributed with this
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-    Author(s): A. Mantzaflaris
 */
 
 //! [Include namespace]
 #include <gismo.h>
 
 using namespace gismo;
-//! [Include namespace]
 
-int main(int argc, char *argv[]) {
+// Global Typedefs
+typedef gsExprAssembler<>::geometryMap geometryMap;
+typedef gsExprAssembler<>::variable variable;
+typedef gsExprAssembler<>::space space;
+typedef gsExprAssembler<>::solution solution;
+
+int main(int argc, char* argv[]) {
+  ////////////////////
+  // Global Options //
+  ////////////////////
+  constexpr const int solution_field_dimension{2};
+
   ////////////////////////////////
   // Parse Command Line Options //
   ////////////////////////////////
-
+  // Title
   gsCmdLine cmd("Linear Elasticity using expressions to prepare Sensitivities");
 
   // Provide vtk data
@@ -54,8 +62,25 @@ int main(int argc, char *argv[]) {
   std::string fn("pde/poisson2d_bvp.xml");
   cmd.addString("f", "file", "Input XML file", fn);
 
+  // Testing
+  bool fd_test{false};
+  cmd.addSwitch("fd-test", "Calculate the fd solution of bilinear form",
+                fd_test);
+
+  // Problem setup
+  bool compute_objective_function{false};
+  cmd.addSwitch(
+      "compute-objective-function",
+      "Compute objective function with respect to a given target distribution",
+      compute_objective_function);
+  bool compute_sensitivities{false};
+  cmd.addSwitch(
+      "compute-sensitivities",
+      "Compute sensitivities with respect to a given objective distribution",
+      compute_sensitivities);
+
   // A few more mesh options
-  int mp_id{0}, source_id{1}, bc_id{2}, ass_opt_id{4};
+  int mp_id{0}, source_id{1}, bc_id{2}, ass_opt_id{3};
   cmd.addInt("m", "multipach_id", "ID of the multipatch mesh in mesh file",
              mp_id);
   cmd.addInt("s", "source_id", "ID of the source term function in mesh file",
@@ -81,7 +106,6 @@ int main(int argc, char *argv[]) {
   gsInfo << "Loaded file " << fd.lastPath() << "\n";
   gsMultiPatch<> mp;
   fd.getId(mp_id, mp);
-  gsInfo << "Mulipatch geometry set...\n";
 
   gsFunctionExpr<> f;
   fd.getId(source_id, f);
@@ -96,13 +120,12 @@ int main(int argc, char *argv[]) {
   //! [Refinement]
   gsMultiBasis<> function_basis(mp, true);  // true: poly-splines (not NURBS)
 
-  // Elevate and p-refine the basis to order p + numElevate
-  // where p is the highest degree in the bases
-  // function_basis.setDegree(function_basis.maxCwiseDegree() + numRefine);
-
   // h-refine each basis
-  for (int r = 0; r < numRefine; ++r) function_basis.uniformRefine();
+  for (int r = 0; r < numRefine; ++r) {
+    function_basis.uniformRefine();
+  }
 
+  // Output user information
   gsInfo << "Patches: " << mp.nPatches()
          << ", min-degree: " << function_basis.minCwiseDegree()
          << ", min-degree: " << function_basis.maxCwiseDegree() << "\n";
@@ -112,83 +135,129 @@ int main(int argc, char *argv[]) {
   gsInfo << "Number of threads: " << omp_get_num_threads() << "\n";
 #endif
 
-  //! [Problem setup]
+  ////////////////////////////////
+  // Problem Setup and Assembly //
+  ////////////////////////////////
+
+  // Expression assembler
   gsExprAssembler<> expr_assembler(1, 1);
   expr_assembler.setOptions(Aopt);
   gsInfo << "Active options:\n" << expr_assembler.options() << "\n";
 
-  typedef gsExprAssembler<>::geometryMap geometryMap;
-  typedef gsExprAssembler<>::variable variable;
-  typedef gsExprAssembler<>::space space;
-  typedef gsExprAssembler<>::solution solution;
-
   // Elements used for numerical integration
   expr_assembler.setIntegrationElements(function_basis);
-  gsExprEvaluator<> expression_evaluator(expr_assembler);
 
   // Set the geometry map
-  geometryMap G = expr_assembler.getMap(mp);
+  geometryMap geom_expr = expr_assembler.getMap(mp);
 
-  // Set the discretization spaces
-  const int solution_field_dimension{2};
-  space u = expr_assembler.getSpace(function_basis, solution_field_dimension);
+  // Set the discretization space
+  space u_trial =
+      expr_assembler.getSpace(function_basis, solution_field_dimension);
 
   // Set the source term
-  auto ff = expr_assembler.getCoeff(f, G);
+  auto ff = expr_assembler.getCoeff(f, geom_expr);
 
   // Solution vector and solution variable
   gsMatrix<> solVector;
-  solution u_sol = expr_assembler.getSolution(u, solVector);
+  solution solution_expression = expr_assembler.getSolution(u_trial, solVector);
 
-  //! [Problem setup]
-
-  //! [Solver loop]
-  gsSparseSolver<>::LU solver;
-
-  double setup_time(0), ma_time(0), slv_time(0), err_time(0);
+  // Setup values for timing
+  double setup_time(0), ma_time(0), slv_time(0);
   gsStopwatch timer;
 
-  //        u.setup(bc, dirichlet::interpolation, 0);
-  u.setup(bc, dirichlet::l2Projection, 0);
+  u_trial.setup(bc, dirichlet::l2Projection, 0);
 
   // Initialize the system
   expr_assembler.initSystem();
   setup_time += timer.stop();
 
-  gsInfo << expr_assembler.numDofs() << std::flush;
+  gsInfo << expr_assembler.numDofs() << std::endl;
 
   timer.restart();
 
   // Compute the system matrix and right-hand side
-  auto bilin_lambda = lame_lambda * idiv(u, G) * idiv(u, G).tr();
-
-  // NOTE : Tensor contraction A:B can be written as trace(A^T * B);
-  auto phys_jacobian = ijac(u, G);
+  auto bilin_lambda =
+      lame_lambda * idiv(u_trial, geom_expr) * idiv(u_trial, geom_expr).tr();
+  auto phys_jacobian = ijac(u_trial, geom_expr);
   auto bilin_mu_1 = lame_mu * (phys_jacobian % phys_jacobian.tr());
   auto bilin_mu_2 = lame_mu * (phys_jacobian.cwisetr() % phys_jacobian.tr());
+  auto lin_form = rho * u_trial * ff * meas(geom_expr);
 
-  auto bilin = (bilin_lambda + bilin_mu_1 + bilin_mu_2) * meas(G);
+  auto bilin_combined =
+      (bilin_lambda + bilin_mu_1 + bilin_mu_2) * meas(geom_expr);
 
-  expr_assembler.assemble(bilin  // matrix
-                          ,
-                          rho * u * ff * meas(G)  // rhs vector
-  );
+  expr_assembler.assemble(bilin_combined);
+  gsInfo << "Combined bilinear form is assembled" << std::endl;
+  expr_assembler.assemble(lin_form);
+  gsInfo << "Volume part of linear form is assembled" << std::endl;
 
   // Compute the Neumann terms defined on physical space
-  auto g_N = expr_assembler.getBdrFunction(G);
-  expr_assembler.assembleBdr(bc.get("Neumann"), u * g_N.tr() * nv(G));
+  auto g_N = expr_assembler.getBdrFunction(geom_expr);
+  // Neumann conditions seem broken here
+  // expr_assembler.assembleBdr(bc.get("Neumann"),
+  //                            u_trial * g_N.val() * nv(geom_expr).tr());
 
   ma_time += timer.stop();
+  gsInfo << "Finished Assembly" << std::endl;
 
-  gsInfo << "." << std::flush;  // Assemblying done
-
+  ///////////////////
+  // Linear Solver //
+  ///////////////////
   timer.restart();
-  solver.compute(expr_assembler.matrix());
+  const auto& matrix_in_initial_configuration = expr_assembler.matrix();
+  const auto rhs_vector = expr_assembler.rhs();
+
+  // Initialize linear solver
+  gsSparseSolver<>::CGDiagonal solver;
+  solver.compute(matrix_in_initial_configuration);
   solVector = solver.solve(expr_assembler.rhs());
   slv_time += timer.stop();
+  gsInfo << "Finished solving linear system" << std::endl;
 
-  gsInfo << "." << std::flush;  // Linear solving done
+  // User output infor timings
+  gsInfo << "\n\nTotal time: " << setup_time + ma_time + slv_time << "\n";
+  gsInfo << "     Setup: " << setup_time << "\n";
+  gsInfo << "  Assembly: " << ma_time << "\n";
+  gsInfo << "   Solving: " << slv_time << "\n" << std::flush;
 
+  //////////////////////////////
+  // Export and Visualization //
+  //////////////////////////////
+  gsExprEvaluator<> expression_evaluator(expr_assembler);
+
+  // Generate Paraview File
+  if (plot) {
+    gsInfo << "Plotting in Paraview...\n";
+    expression_evaluator.options().setSwitch("plot.elements", false);
+    expression_evaluator.writeParaview(solution_expression, geom_expr,
+                                       "solution");
+
+    gsFileManager::open("solution.pvd");
+  } else {
+    gsInfo << "Done. No output created, re-run with --plot to get a "
+              "ParaView "
+              "file containing the solution.\n";
+  }
+  //! [Export visualization in ParaView]
+
+  // Export solution file as xml
+  if (export_xml) {
+    gsInfo << "Writing to G+Smo XML." << std::flush;
+    gsMultiPatch<> mpsol;
+    gsMatrix<> full_solution;
+
+    gsFileData<> output;
+
+    output << solVector;
+
+    solution_expression.extractFull(full_solution);
+    output << full_solution;
+    output.save("solution-field.xml");
+  }
+
+  return EXIT_SUCCESS;
+
+  //! [Here starts the work in progress]
   ///////////////////////////////////////
   // Differentiating the linear system //
   ///////////////////////////////////////
@@ -200,59 +269,29 @@ int main(int argc, char *argv[]) {
     evalPoint << .5, .5;
 
     // Modified / simplified expressions:
-    auto d_jac_d_c = jac(u);  // assumes isoparametrics
-    auto inv_jac = jac(G).inv();
+    auto d_jac_d_c = jac(u_trial);  // assumes isoparametrics
+    auto inv_jac = jac(geom_expr).inv();
     auto d_jac_inv_d_c = -inv_jac * d_jac_d_c;
 
     // Differntiating lambda
     auto bilin_lambda_der1 =
-        (d_jac_inv_d_c * ijac(u_sol, G)).trace() * idiv(u, G).tr();
+        (d_jac_inv_d_c * ijac(solution_expression, geom_expr)).trace() *
+        idiv(u_trial, geom_expr).tr();
     // auto bilin_lambda_der2 =
-    //     idiv(u_sol, G) * (d_jac_inv_d_c * igrad(u, G).tr());
-    auto bilin_lambda_der = lame_lambda * (bilin_lambda_der1) * meas(G);
+    //     idiv(solution_expression, geom_expr) * (d_jac_inv_d_c *
+    //     igrad(u_trial, geom_expr).tr());
+    auto bilin_lambda_der = lame_lambda * (bilin_lambda_der1)*meas(geom_expr);
 
     auto derivative = bilin_lambda_der;
 
-    gsInfo << "\nFirst Expression:\n"
-           << evaluator.eval(
-                  (d_jac_inv_d_c * ijac(u_sol, G)).trace() * idiv(u, G).tr(),
-                  evalPoint)
-           << "\n";
+    gsInfo
+        << "\nFirst Expression:\n"
+        << evaluator.eval(
+               (d_jac_inv_d_c * ijac(solution_expression, geom_expr)).trace() *
+                   idiv(u_trial, geom_expr).tr(),
+               evalPoint)
+        << "\n";
 
-    timer.stop();
-    gsInfo << "\n\nTotal time: " << setup_time + ma_time + slv_time + err_time
-           << "\n";
-    gsInfo << "     Setup: " << setup_time << "\n";
-    gsInfo << "  Assembly: " << ma_time << "\n";
-    gsInfo << "   Solving: " << slv_time << "\n";
+    return EXIT_SUCCESS;
   }
-  //! [Export visualization in ParaView]
-  if (plot) {
-    gsInfo << "Plotting in Paraview...\n";
-    expression_evaluator.options().setSwitch("plot.elements", true);
-    expression_evaluator.writeParaview(u_sol, G, "solution");
-
-    gsFileManager::open("solution.pvd");
-  } else {
-    gsInfo << "Done. No output created, re-run with --plot to get a ParaView "
-              "file containing the solution.\n";
-  }
-  //! [Export visualization in ParaView]
-
-  if (export_xml) {
-    gsInfo << "Writing to G+Smo XML." << std::flush;
-    gsMultiPatch<> mpsol;
-    gsMatrix<> full_solution;
-
-    gsFileData<> output;
-
-    output << solVector;
-
-    u_sol.extractFull(full_solution);
-    output << full_solution;
-    output.save("solution-field.xml");
-  }
-
-  return EXIT_SUCCESS;
-
 }  // end main
