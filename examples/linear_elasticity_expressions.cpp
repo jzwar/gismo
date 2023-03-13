@@ -55,24 +55,25 @@ auto ComputeSensitivityFD(const gsMultiPatch<>& mp_dx, const gsOptionList& Aopt,
   // Assemble
   // Auxiliary expressions
   auto meas_expr = meas(geom_expr);
-  auto BL_lambda_1 = idiv(solution_expression, geom_expr).val();
-  auto BL_lambda_2 = idiv(u_trial, geom_expr);
-  auto BL_lambda = lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr;
+  auto BL_lambda_1 = idiv(solution_expression, geom_expr).val();  // validated
+  auto BL_lambda_2 = idiv(u_trial, geom_expr);                    // validated
+  auto BL_lambda =
+      lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr;    // validated
   auto BL_mu1_1 = ijac(solution_expression, geom_expr);       // validated
   auto BL_mu1_2 = ijac(u_trial, geom_expr);                   // validated
   auto BL_mu1 = lame_mu * (BL_mu1_2 % BL_mu1_1) * meas_expr;  // validated
   expr_assembler.initSystem();
   expr_assembler.clearRhs();
-  expr_assembler.assemble(BL_mu1);
+  expr_assembler.assemble(BL_lambda);
 
-  // // Evaluator for simplified expressions
-  // gsExprEvaluator<> expression_evaluator(expr_assembler);
-  // gsMatrix<> evalPoint(2, 1);
-  // evalPoint << .25, .6;
+  // Evaluator for simplified expressions
+  gsExprEvaluator<> expression_evaluator(expr_assembler);
+  gsMatrix<> evalPoint(2, 1);
+  evalPoint << .25, .6;
 
-  // gsInfo << "BL_lambda : \n"
-  //        << std::setprecision(20)
-  //        << expression_evaluator.eval(BL_lambda, evalPoint) << std::endl;
+  gsInfo << "BL_mu1_2 : \n"
+         << std::setprecision(20)
+         << expression_evaluator.eval(BL_mu1_2, evalPoint) << std::endl;
 
   // Return the matrix to evaluate the residual
   return expr_assembler.rhs();
@@ -238,10 +239,10 @@ int main(int argc, char* argv[]) {
   auto phys_jacobian = ijac(u_trial, geom_expr);
   auto bilin_lambda = lame_lambda * idiv(u_trial, geom_expr) *
                       idiv(u_trial, geom_expr).tr() * meas(geom_expr);
-  auto bilin_mu_1 =
-      lame_mu * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
-  auto bilin_mu_2 = lame_mu * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
+  auto bilin_mu_1 = lame_mu * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
                     meas(geom_expr);
+  auto bilin_mu_2 =
+      lame_mu * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
   auto lin_form = rho * u_trial * ff * meas(geom_expr);
 
   auto bilin_combined = (bilin_lambda + bilin_mu_1 + bilin_mu_2);
@@ -381,32 +382,65 @@ int main(int argc, char* argv[]) {
       // sections
       auto BL_lambda_1 =
           idiv(solution_expression, geom_expr).val();  // validated
+      auto BL_lambda_2 = idiv(u_trial, geom_expr);     // validated
+      auto BL_lambda =
+          lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr;  // validated
+      // trace(A * B) = A:B^T
       auto BL_lambda_1_dx =
           (ijac(solution_expression, geom_expr) * aux_expr.tr())
               .trace()
-              .tr();                                // validated
-      auto BL_lambda_2 = idiv(u_trial, geom_expr);  // validated
-      // trace(A * B) = A:B^T
+              .tr();                                                // validated
       auto BL_lambda_2_dx = (ijac(u_trial, geom_expr) % aux_expr);  // validated
-      auto BL_lambda =
-          lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr;  // validated
       auto BL_lambda_dx =
           lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr_dx -
           lame_lambda * BL_lambda_2_dx * BL_lambda_1 * meas_expr -
           lame_lambda * BL_lambda_2 * BL_lambda_1_dx * meas_expr;  // validated
 
       // 2. Bilinear form of mu (first part)
-      auto BL_mu1_1 = ijac(solution_expression, geom_expr);  // validated
-      auto BL_mu1_2 = ijac(u_trial, geom_expr);              // validated
-      auto BL_mu1_1_dx =
-          ijac(solution_expression, geom_expr) * aux_expr;        // WIP
-      auto BL_mu1_2_dx = ijac(u_trial, geom_expr) * aux_expr;     // WIP
-      auto BL_mu1 = lame_mu * (BL_mu1_1 % BL_mu1_2) * meas_expr;  // validated
+      auto BL_mu1_1 = ijac(solution_expression, geom_expr);       // validated
+      auto BL_mu1_2 = ijac(u_trial, geom_expr);                   // validated
+      auto BL_mu1 = lame_mu * (BL_mu1_2 % BL_mu1_1) * meas_expr;  // validated
+      auto BL_mu1_1_dx = (ijac(solution_expression, geom_expr) *
+                          aux_expr.tr());  //          validated
+
+      auto BL_mu1_2_dx = ijac(u_trial, geom_expr).cwisetr() * aux_expr;  // WIP
       // auto BL_mu1_dx = -lame_mu * (BL_mu1_2 % BL_mu1_1_dx) * meas_expr -
       //                  lame_mu * (BL_mu1_2_dx % BL_mu1_1) * meas_expr +
       //                  lame_mu * (BL_mu1_2 % BL_mu1_1) * meas_expr_dx;
 
-      print_function_expressions("BL_mu1", BL_mu1);
+      gsInfo << "djacdc : \n"
+             << std::setprecision(20)
+             << expression_evaluator.eval(djacdc, evalPoint) << std::endl;
+
+      gsInfo << "djacdc * inv_jacs : \n"
+             << std::setprecision(20)
+             << expression_evaluator.eval(djacdc * inv_jacs, evalPoint)
+             << std::endl;
+
+      gsInfo << "aux_expr : \n"
+             << std::setprecision(20)
+             << expression_evaluator.eval(aux_expr, evalPoint) << std::endl;
+
+      // print_function_expressions("BL_mu1", BL_mu1);
+      // print_function_expressions("BL_mu1_1", BL_mu1_1);
+      // print_function_expressions("BL_mu1_1_dx", BL_mu1_1_dx);
+      // print_function_expressions("BL_mu1_2", BL_mu1_2);
+      // print_function_expressions("BL_mu1_2_dx", BL_mu1_2_dx);
+      // print_function_expressions(
+      //     "-lame_mu * (BL_mu1_2 % BL_mu1_1_dx) * meas_expr",
+      //     -lame_mu * (BL_mu1_2 % BL_mu1_1_dx) * meas_expr);
+      // print_function_expressions(
+      //     "lame_mu * (BL_mu1_1 % BL_mu1_2).tr()",
+      //     lame_mu * (BL_mu1_2 % BL_mu1_1) * meas_expr_dx);
+
+      // Assemble
+      expr_assembler.clearRhs();
+      expr_assembler.assemble(BL_mu1);
+      expr_assembler.clearMatrix();
+      expr_assembler.assemble(bilin_mu_1);
+      // gsMatrix<> matrix = expr_assembler.matrix();
+      // gsInfo << "First part of the matrix computed : \n" << matrix <<
+      // std::endl;
 
       /////////////////////////////////////////
       // This section is meant for DEBUGGING //
@@ -414,7 +448,7 @@ int main(int argc, char* argv[]) {
 
       if (fd_test) {
         expr_assembler.clearRhs();
-        expr_assembler.assemble(BL_mu1);
+        expr_assembler.assemble(BL_lambda);
         const auto lame_lambda_rhs = expr_assembler.rhs();
         gsFileData<> fddx("dx." + fn);
         gsInfo << "Loaded file " << fddx.lastPath() << "\n";
@@ -426,8 +460,9 @@ int main(int argc, char* argv[]) {
         auto rhs_of_fd_system = ComputeSensitivityFD(
             mpdx, Aopt, function_basis, lame_lambda, lame_mu, solVector, bc);
 
-        gsInfo << "FD Approximation for lambda part of matrix assembly is :\n"
-               << (rhs_of_fd_system - lame_lambda_rhs) / ddx << std::endl;
+        // gsInfo << "FD Approximation for lambda part of matrix assembly is
+        // :\n"
+        //        << (rhs_of_fd_system - lame_lambda_rhs) / ddx << std::endl;
       }
 
       // 2. Bilinear form of mu (first part)
