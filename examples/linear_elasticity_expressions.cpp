@@ -147,7 +147,7 @@ auto ComputeSensitivityFD(const std::string& fn, const double& lame_lambda,
 
   // Solution space
   gsFunctionExpr<> f;
-  fddx.getId(1, f);
+  fddx.getId(source_id, f);
   gsInfo << "Source function " << f << "\n";
   auto ff = expr_assembler.getCoeff(f, geom_expr);
 
@@ -307,9 +307,9 @@ int main(int argc, char* argv[]) {
   gsInfo << "Number of threads: " << omp_get_num_threads() << "\n";
 #endif
 
-  ////////////////////////////////
-  // Problem Setup and Assembly //
-  ////////////////////////////////
+  ///////////////////
+  // Problem Setup //
+  ///////////////////
 
   // Expression assembler
   gsExprAssembler<> expr_assembler(1, 1);
@@ -345,7 +345,10 @@ int main(int argc, char* argv[]) {
 
   gsInfo << "Number of degrees of freedom : " << expr_assembler.numDofs()
          << std::endl;
-
+  //////////////
+  // Assembly //
+  //////////////
+  gsInfo << "Starting assembly of linear system ..." << std::flush;
   timer.restart();
 
   // Compute the system matrix and right-hand side
@@ -370,11 +373,12 @@ int main(int argc, char* argv[]) {
   //                            u_trial * g_N.val() * nv(geom_expr).tr());
 
   ma_time += timer.stop();
-  gsInfo << "Finished Assembly" << std::endl;
+  gsInfo << "\t\tFinished" << std::endl;
 
   ///////////////////
   // Linear Solver //
   ///////////////////
+  gsInfo << "Solving the linear system of equations ..." << std::flush;
   timer.restart();
   const auto& matrix_in_initial_configuration = expr_assembler.matrix();
   const auto rhs_vector = expr_assembler.rhs();
@@ -384,13 +388,7 @@ int main(int argc, char* argv[]) {
   solver.compute(matrix_in_initial_configuration);
   solVector = solver.solve(expr_assembler.rhs());
   slv_time += timer.stop();
-  gsInfo << "Finished solving linear system" << std::endl;
-
-  // User output infor timings
-  gsInfo << "\n\nTotal time: " << setup_time + ma_time + slv_time << "\n";
-  gsInfo << "     Setup: " << setup_time << "\n";
-  gsInfo << "  Assembly: " << ma_time << "\n";
-  gsInfo << "   Solving: " << slv_time << "\n" << std::flush;
+  gsInfo << "\t\t\tFinished" << std::endl;
 
   //////////////////////////////
   // Export and Visualization //
@@ -398,63 +396,37 @@ int main(int argc, char* argv[]) {
   gsExprEvaluator<> expression_evaluator(expr_assembler);
 
   // Generate Paraview File
+  gsInfo << "Starting the export ..." << std::flush;
   if (plot) {
-    gsInfo << "Plotting in Paraview...\n";
     expression_evaluator.options().setSwitch("plot.elements", false);
     expression_evaluator.writeParaview(solution_expression, geom_expr,
                                        "solution");
 
     gsFileManager::open("solution.pvd");
-  } else {
-    gsInfo << "Done. No output created, re-run with --plot to get a "
-              "ParaView "
-              "file containing the solution.\n";
   }
   //! [Export visualization in ParaView]
 
   // Export solution file as xml
   if (export_xml) {
-    gsInfo << "Writing to G+Smo XML." << std::flush;
     gsMultiPatch<> mpsol;
     gsMatrix<> full_solution;
-
     gsFileData<> output;
-
     output << solVector;
-
     solution_expression.extractFull(full_solution);
     output << full_solution;
     output.save("solution-field.xml");
-  } else {
-    gsInfo << "Export in Paraview format only, no xml output created.\n";
   }
-  gsInfo << std::endl;
 
-  // For local evaluation prior to testing
-  gsExprEvaluator<> evaluator{expr_assembler};
-  gsMatrix<> evalPoint(2, 1);
-  evalPoint << .25, .6;
-
-  // Auxiliary for validation of expressions
-  auto print_function_expressions = [&](const std::string& name,
-                                        auto expression) {
-    gsInfo << "\nThe expression " << name << " : " << expression
-           << " evaluates at (" << evalPoint(0) << ", " << evalPoint(1)
-           << ") to \n"
-           << evaluator.eval(expression, evalPoint) << std::endl;
-    gsInfo << "It has \t" << expression.rows() << " rows and \t"
-           << expression.cols() << " cols" << std::endl;
-    gsInfo << "Is Vector : " << expression.isVector()
-           << " is Vector^T : " << expression.isVectorTr()
-           << " is Matrix : " << expression.isMatrix() << std::endl;
-    gsInfo << "The cardinality of the expression is : "
-           << expression.cardinality() << std::endl;
-  };
+  if (!plot && !export_xml) {
+    gsInfo << "... No output created ...";
+  }
+  gsInfo << "\tFinished" << std::endl;
 
   ////////////////////////////////////////////////////
   // Optimization Requirements - Objective Function //
   ////////////////////////////////////////////////////
   if (compute_objective_function) {
+    gsInfo << "Computing the objective function value ..." << std::flush;
     // Norm of displacement in Neumann region
     expr_assembler.clearRhs();
     space u_trial_single_var = expr_assembler.getSpace(function_basis, 1);
@@ -465,17 +437,39 @@ int main(int argc, char* argv[]) {
         u_trial_single_var * (solution_expression.tr() * solution_expression) *
             nv(geom_expr).norm());
     const auto objective_function_value = expr_assembler.rhs().sum();
+    gsInfo << "\tFinished Vaule : " << std::setprecision(20)
+           << objective_function_value << std::endl;
 
     // Assemble derivatives of objective function with respect to field
     if (compute_sensitivities) {
       //////////////////////////////////////
       // Derivative of Objective Function //
       //////////////////////////////////////
+      gsInfo << "Computing the objective function derivative ..." << std::flush;
       expr_assembler.clearRhs();
       expr_assembler.assembleBdr(
           bc.get("Neumann"),
           2 * u_trial * solution_expression * nv(geom_expr).norm());
       const auto objective_function_derivative = expr_assembler.rhs();
+      gsInfo << "\tFinished" << std::endl;
+
+      /////////////////////////////////
+      // Solving the adjoint problem //
+      /////////////////////////////////
+      gsInfo << "Solving the adjoint equation ..." << std::flush;
+      timer.restart();
+      const gsSparseMatrix<> matrix_in_initial_configuration(
+          expr_assembler.matrix().transpose().eval());
+      auto rhs_vector = expr_assembler.rhs();
+
+      // Initialize linear solver
+      gsSparseSolver<>::CGDiagonal solverAdjoint;
+      gsMatrix<> lagrange_multipliers;
+      solverAdjoint.compute(matrix_in_initial_configuration);
+      lagrange_multipliers = -solverAdjoint.solve(expr_assembler.rhs());
+      slv_time += timer.stop();
+
+      gsInfo << "\t\tFinished - T : " << slv_time << std::endl;
 
       ////////////////////////////////
       // Derivative of the LHS Form //
@@ -567,6 +561,13 @@ int main(int argc, char* argv[]) {
       // Assemble
       expr_assembler.assemble(LF_1_dx);
 
+      ///////////////////////////
+      // Compute sensitivities //
+      ///////////////////////////
+      const auto sensitivities =
+          lagrange_multipliers.transpose() * expr_assembler.matrix();
+      gsInfo << "Computed Sensitivities : " << sensitivities << std::endl;
+
       /////////////////////////////////////////
       // This section is meant for DEBUGGING //
       /////////////////////////////////////////
@@ -589,6 +590,12 @@ int main(int argc, char* argv[]) {
       }
     }
   }
+
+  // User output infor timings
+  gsInfo << "\n\nTotal time: " << setup_time + ma_time + slv_time << "\n";
+  gsInfo << "     Setup: " << setup_time << "\n";
+  gsInfo << "  Assembly: " << ma_time << "\n";
+  gsInfo << "   Solving: " << slv_time << "\n" << std::flush;
   return EXIT_SUCCESS;
-}
+
 }  // end main
