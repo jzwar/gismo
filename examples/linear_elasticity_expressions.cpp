@@ -367,10 +367,10 @@ int main(int argc, char* argv[]) {
   expr_assembler.assemble(lin_form);
 
   // Compute the Neumann terms defined on physical space
-  // auto g_N = expr_assembler.getBdrFunction(geom_expr);
+  auto g_N = expr_assembler.getBdrFunction(geom_expr);
   // Neumann conditions seem broken here
-  // expr_assembler.assembleBdr(bc.get("Neumann"),
-  //                            u_trial * g_N.val() * nv(geom_expr).tr());
+  expr_assembler.assembleBdr(bc.get("Neumann"),
+                             u_trial * g_N * nv(geom_expr).norm());
 
   ma_time += timer.stop();
   gsInfo << "\t\tFinished" << std::endl;
