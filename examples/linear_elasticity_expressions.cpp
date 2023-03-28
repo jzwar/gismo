@@ -202,6 +202,11 @@ int main(int argc, char* argv[]) {
       "compute-sensitivities",
       "Compute sensitivities with respect to a given objective distribution",
       compute_sensitivities);
+  bool output_to_file{false};
+  cmd.addSwitch(
+      "output-to-file",
+      "Write sensitivities and objective function value to file if requested",
+      output_to_file);
 
   // A few more mesh options
   int mp_id{0}, source_id{1}, bc_id{2}, ass_opt_id{3};
@@ -401,6 +406,13 @@ int main(int argc, char* argv[]) {
     gsInfo << "\tFinished Vaule : " << std::setprecision(20)
            << objective_function_value << std::endl;
 
+    if (output_to_file) {
+      std::ofstream objective_function_file("objective_function.out");
+      objective_function_file << std::setprecision(25)
+                              << objective_function_value;
+      objective_function_file.close();
+    }
+
     // Assemble derivatives of objective function with respect to field
     if (compute_sensitivities) {
       //////////////////////////////////////
@@ -430,11 +442,12 @@ int main(int argc, char* argv[]) {
       lagrange_multipliers = -solverAdjoint.solve(expr_assembler.rhs());
       slv_time += timer.stop();
 
-      gsInfo << "\t\tFinished - T : " << slv_time << std::endl;
+      gsInfo << "\t\tFinished" << std::endl;
 
       ////////////////////////////////
       // Derivative of the LHS Form //
       ////////////////////////////////
+      gsInfo << "Start assembly of derivatives of linear system" << std::flush;
       expr_assembler.clearRhs();
       expr_assembler.clearMatrix();
 
@@ -521,6 +534,7 @@ int main(int argc, char* argv[]) {
 
       // Assemble
       expr_assembler.assemble(LF_1_dx);
+      gsInfo << "\t\tFinished" << std::endl;
 
       ///////////////////////////
       // Compute sensitivities //
@@ -531,10 +545,16 @@ int main(int argc, char* argv[]) {
 
       const gsMatrix<>& parameter_sensitivity = GetParameterSensitivities(
           fn_param, numRefine, mp.geoDim(), dof_mapper);
+      const gsMatrix<> sensitivities_param =
+          sensitivities * parameter_sensitivity;
 
       // Check DEBUG
-      gsInfo << "Sensitivity is " << sensitivities * parameter_sensitivity
-             << std::endl;
+      gsInfo << "Sensitivity is " << sensitivities_param << std::endl;
+      if (output_to_file) {
+        std::ofstream sensitivity_file("sensitivities.out");
+        sensitivity_file << std::setprecision(25) << sensitivities_param;
+        sensitivity_file.close();
+      }
     }
   }
 
