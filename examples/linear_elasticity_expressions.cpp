@@ -552,7 +552,8 @@ int main(int argc, char* argv[]) {
       gsInfo << "Sensitivity is " << sensitivities_param << std::endl;
       if (output_to_file) {
         std::ofstream sensitivity_file("sensitivities.out");
-        sensitivity_file << std::setprecision(25) << sensitivities_param;
+        sensitivity_file << std::setprecision(25) << sensitivities_param
+                         << std::flush;
         sensitivity_file.close();
       }
     }
