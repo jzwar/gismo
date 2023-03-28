@@ -400,11 +400,6 @@ int main(int argc, char* argv[]) {
       gsMatrix<> evalPoint(2, 1);
       evalPoint << .25, .6;
 
-      // Check solution
-      expr_assembler.assemble(thermal_diffusivity * BL2 * BL1.tr() * BL3);
-      gsInfo << "Bilinear form of solution residual \n"
-             << expr_assembler.rhs() - rhs_vector << std::endl;
-
       // Print out lambda function
       auto print_function_expressions = [&](const std::string& name,
                                             auto expression) {
@@ -419,6 +414,11 @@ int main(int argc, char* argv[]) {
         gsInfo << "The cardinality of the expression is : "
                << expression.cardinality() << std::endl;
       };
+
+      // Check solution
+      expr_assembler.assemble(thermal_diffusivity * BL2 * BL1.tr() * BL3);
+      gsInfo << "Bilinear form of solution residual \n"
+             << expr_assembler.rhs() - rhs_vector << std::endl;
 
       print_function_expressions("Jacs", jacobian);
       print_function_expressions("inv_jacs", inv_jacs);

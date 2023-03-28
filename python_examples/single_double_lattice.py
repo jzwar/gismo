@@ -1,7 +1,6 @@
 import gustaf as gus
 import numpy as np
 
-
 gismo_options = [
     {
         "tag": "Function",
@@ -82,12 +81,12 @@ gismo_options = [
                 },
             },
             {
-                "tag": "bc",
+                "tag": "bc",    
                 "attributes": {
                     "type": "Neumann",
                     "function": "2",
                     "unknown": "0",
-                    "name": "BID6",
+                    "name": "BID5",
                 },
             },
         ],
@@ -173,46 +172,40 @@ gismo_options = [
     },
 ]
 
-length = 2
+length = 1
 height = 1
-tiling_x = 8
-tiling_y = 4
+tiling_x = 1
+tiling_y = 1
+DX = 1e-4
 
-generator = gus.spline.microstructure.Microstructure()
-deformation_function = gus.Bezier(
-    degrees=[1, 1],
-    control_points=[[0, 0], [length, 0], [0, height], [length, height]],
-)
-deformation_function = deformation_function.bspline
-deformation_function.insert_knots(0,[i * (1/tiling_x) for i in range(1,tiling_x)])
-deformation_function.insert_knots(1,[i * (1/tiling_y) for i in range(1,tiling_y)])
-generator.deformation_function = deformation_function
-generator.tiling=[1,1]
-generator.microtile = gus.spline.microstructure.tiles.DoubleLatticeTile()
-
-parameter_spline = gus.BSpline(
-    degrees=[0,0],
-    knot_vectors=deformation_function.unique_knots,
-    control_points=np.random.rand(tiling_x*tiling_y,1)*0.2
-)
 def foo(x):
     """
     Parametrization Function (determines thickness)
     """
-    return tuple([parameter_spline.evaluate(x).flatten()])
+    return tuple([np.ones(x.shape[0]) * 0.2])
 
+def fooDX(x):
+    """
+    Parametrization Function (determines thickness)
+    """
+    return tuple([np.ones(x.shape[0]) * (0.2 + DX)])
 
 def foo_deriv(x):
-    basis_function_matrix = np.zeros((x.shape[0],parameter_spline.control_points.shape[0]))
-    basis_functions, support = parameter_spline.basis_and_support(x)
-    np.put_along_axis(basis_function_matrix, support, basis_functions, axis=1)
-    return [tuple([bf]) for bf in basis_function_matrix.T]
+    return [tuple([np.ones(x.shape[0])])]
 
+
+generator = gus.spline.microstructure.Microstructure()
+generator.deformation_function = gus.Bezier(
+    degrees=[1, 1],
+    control_points=[[0, 0], [length, 0], [0, height], [length, height]],
+)
+generator.tiling = [tiling_x, tiling_y]
+generator.microtile = gus.spline.microstructure.tiles.DoubleLatticeTile()
 generator.parametrization_function = foo
 generator.parameter_sensitivity_function = foo_deriv
-my_ms, my_ms_der = generator.create(contact_length=0.5)
 
-
+# Test Jacobians
+my_ms, my_ms_deriv = generator.create(contact_length=0.5)
 
 def identifier_function(deformation_function, face_id):
     boundary_spline = deformation_function.extract_boundaries(face_id)[0]
@@ -230,7 +223,6 @@ def identifier_function_neumann(x):
 
 
 multipatch = gus.spline.splinepy.Multipatch(my_ms)
-multipatch.add_fields(*my_ms_der, check_compliance=True, check_conformity=True)
 multipatch.determine_interfaces()
 multipatch.boundary_from_function(
     identifier_function(generator.deformation_function, 0)
@@ -244,9 +236,20 @@ multipatch.boundary_from_function(
 multipatch.boundary_from_function(
     identifier_function(generator.deformation_function, 3)
 )
+multipatch_deriv = gus.spline.splinepy.Multipatch(my_ms_deriv[0])
+multipatch_deriv.interfaces = multipatch.interfaces
+# multipatch.boundary_from_function(
+#     identifier_function_neumann, mask=[5]
+# )
 
-multipatch.boundary_from_function(
-    identifier_function_neumann, mask=[5]
-)
+gus.spline.io.gismo.export("lattice_1_mesh.xml", multipatch=multipatch, options=gismo_options)
+gus.spline.io.gismo.export("lattice_1_mesh_dx.xml", multipatch=multipatch_deriv)
 
-gus.spline.io.gismo.export("lattice_1_mesh.xml", multipatch=multipatch, options=gismo_options, export_fields=True)
+# DX Mesh
+
+generator.parametrization_function = fooDX
+generator.parameter_sensitivity_function = None
+my_ms = generator.create(contact_length=0.5)
+multipatch_dx = gus.spline.splinepy.Multipatch(my_ms)
+multipatch_dx.interfaces = multipatch.interfaces
+gus.spline.io.gismo.export("lattice_1_meshDX.xml", multipatch=multipatch_dx, options=gismo_options)
