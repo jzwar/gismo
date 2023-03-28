@@ -106,89 +106,42 @@ typedef gsExprAssembler<>::variable variable;
 typedef gsExprAssembler<>::space space;
 typedef gsExprAssembler<>::solution solution;
 
-/**
- * @brief Function is only temporary and serves as a FD approximation to
- * validate expressions
- *
- * to be deleted
- */
-auto ComputeSensitivityFD(const std::string& fn, const double& lame_lambda,
-                          const double& lame_mu, const double& rho,
-                          const int ref,
-                          const gsMatrix<>& solVector_reference) {
-  // Assuming defaults
-  int mp_id{0}, source_id{1}, bc_id{2}, ass_opt_id{3};
+gsMatrix<> GetParameterSensitivities(
+    std::string filename,          // Filename for parametrization
+    const int& num_refine,         // uniform refinement steps
+    const int& dim,                // Geometric dimension
+    const gsDofMapper& dof_mapper  // DofMapper of the original problem
+) {
+  gsFileData<> fd(filename);
+  gsMultiPatch<> mp;
+  fd.getId(0, mp);
+  const int design_dimension = mp.geoDim() / dim;
+  gsInfo << "Parameter dimensionality " << design_dimension << std::endl;
 
-  gsFileData<> fddx("dx." + fn);
-  gsInfo << "Loaded file " << fddx.lastPath() << "\n";
-  gsMultiPatch<> mpdx;
-  fddx.getId(mp_id, mpdx);
-  gsBoundaryConditions<> bcdx;
-  fddx.getId(bc_id, bcdx);
-  bcdx.setGeoMap(mpdx);
-  gsExprAssembler<> expr_assembler(1, 1);
-  gsOptionList Aopt;
-  fddx.getId(ass_opt_id, Aopt);
-  expr_assembler.setOptions(Aopt);
-
-  // Elements used for numerical integration
-  gsMultiBasis<> function_basis(
-      mpdx, true);  // true: poly-splines (not NURBS)// h-refine each basis
-  for (int r = 0; r < ref; ++r) {
-    function_basis.uniformRefine();
+  // h-refine each basis
+  for (int r = 0; r < num_refine; ++r) {
+    mp.uniformRefine();
   }
-  expr_assembler.setIntegrationElements(function_basis);
 
-  // Set the geometry map
-  geometryMap geom_expr = expr_assembler.getMap(mpdx);
-
-  // Set the discretization space
-  space u_trial = expr_assembler.getSpace(function_basis, 2);
-
-  // Solution space
-  gsFunctionExpr<> f;
-  fddx.getId(source_id, f);
-  gsInfo << "Source function " << f << "\n";
-  auto ff = expr_assembler.getCoeff(f, geom_expr);
-
-  gsMatrix<> solVector{solVector_reference};
-  solution solution_expression = expr_assembler.getSolution(u_trial, solVector);
-
-  u_trial.setup(bcdx, dirichlet::l2Projection, 0);
-  // Compute the system matrix and right-hand side
-
-  // Assemble
-  // Auxiliary expressions
-  auto meas_expr = meas(geom_expr);
-  auto BL_lambda_1 = idiv(solution_expression, geom_expr).val();  // validated
-  auto BL_lambda_2 = idiv(u_trial, geom_expr);                    // validated
-  auto BL_lambda =
-      lame_lambda * BL_lambda_2 * BL_lambda_1 * meas_expr;         // validated
-  auto BL_mu1_1 = ijac(solution_expression, geom_expr);            // validated
-  auto BL_mu1_2 = ijac(u_trial, geom_expr);                        // validated
-  auto BL_mu1 = lame_mu * (BL_mu1_2 % BL_mu1_1) * meas_expr;       // validated
-  auto BL_mu2_1 = ijac(solution_expression, geom_expr).cwisetr();  // validated
-  auto& BL_mu2_2 = BL_mu1_2;                                       // validated
-  auto BL_mu2 = lame_mu * (BL_mu2_2 % BL_mu2_1) * meas_expr;       // validated
-  auto LF_1 = -rho * u_trial * ff * meas_expr;                     // validated
-  expr_assembler.initSystem();
-  expr_assembler.clearRhs();
-  expr_assembler.assemble(BL_lambda);
-  expr_assembler.assemble(BL_mu1);
-  expr_assembler.assemble(BL_mu2);
-  expr_assembler.assemble(LF_1);
-
-  // Evaluator for simplified expressions
-  gsExprEvaluator<> expression_evaluator(expr_assembler);
-  gsMatrix<> evalPoint(2, 1);
-  evalPoint << .25, .6;
-
-  // gsInfo << "BL_mu1_2 : \n"
-  //        << std::setprecision(20)
-  //        << expression_evaluator.eval(BL_mu1_2, evalPoint) << std::endl;
-
-  // Return the matrix to evaluate the residual
-  return expr_assembler.rhs();
+  // Start the assignement
+  gsMatrix<> sensitivities;
+  const size_t totalSz = dof_mapper.freeSize();
+  sensitivities.resize(totalSz, design_dimension);
+  for (size_t j_patch = 0; j_patch != mp.nPatches(); j_patch++) {
+    for (index_t k_dim = 0; k_dim != dim; k_dim++) {
+      for (size_t l_dof = 0; l_dof != dof_mapper.patchSize(j_patch, k_dim);
+           l_dof++) {
+        if (dof_mapper.is_free(l_dof, j_patch, k_dim)) {
+          const int global_id = dof_mapper.index(l_dof, j_patch, k_dim);
+          for (int i_design{}; i_design < design_dimension; i_design++) {
+            sensitivities(global_id, i_design) =
+                mp.patch(j_patch).coef(l_dof, k_dim + i_design * dim);
+          };
+        }
+      }
+    }
+  }
+  return sensitivities;
 }
 
 int main(int argc, char* argv[]) {
@@ -210,6 +163,9 @@ int main(int argc, char* argv[]) {
   bool export_xml = false;
   cmd.addSwitch("export-xml", "Export solution into g+smo xml format.",
                 export_xml);
+  int sample_rate{4};
+  cmd.addInt("q", "sample-rate", "Sample rate of splines for export",
+             sample_rate);
 
   // Lame constants
   real_t lame_lambda{2000000}, lame_mu{500000}, rho{1000};
@@ -223,21 +179,17 @@ int main(int argc, char* argv[]) {
   index_t numRefine = 0;
   cmd.addInt("r", "uniformRefine", "Number of Uniform h-refinement loops",
              numRefine);
-  index_t numElevate = 0;
-  cmd.addInt("e", "degreeElevation",
-             "Number of degree elevation steps to perform before solving (0: "
-             "equalize degree in all directions)",
-             numElevate);
+  // index_t numElevate = 0;
+  // cmd.addInt("e", "degreeElevation",
+  //            "Number of degree elevation steps to perform before solving (0:
+  //            " "equalize degree in all directions)", numElevate);
 
   std::string fn("../playground/linear_elasticity/askew_rectangle_mesh.xml");
   cmd.addString("f", "file", "Input XML file", fn);
 
-  // Testing
-  bool fd_test{false};
-  double ddx{0.00001};
-  cmd.addSwitch("fd-test", "Calculate the fd solution of bilinear form",
-                fd_test);
-  cmd.addReal("d", "ddx", "Calculate the fd solution of bilinear form", ddx);
+  std::string fn_param("");
+  cmd.addString("x", "parametrization-file", "Control Point sensitivitiy file",
+                fn_param);
 
   // Problem setup
   bool compute_objective_function{false};
@@ -288,6 +240,8 @@ int main(int argc, char* argv[]) {
   gsInfo << "Boundary conditions:\n" << bc << "\n";
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
+
+  gsInfo << "Geometric dimension " << mp.geoDim() << std::endl;
 
   //! [Refinement]
   gsMultiBasis<> function_basis(mp, true);  // true: poly-splines (not NURBS)
@@ -345,6 +299,7 @@ int main(int argc, char* argv[]) {
 
   gsInfo << "Number of degrees of freedom : " << expr_assembler.numDofs()
          << std::endl;
+
   //////////////
   // Assembly //
   //////////////
@@ -396,17 +351,25 @@ int main(int argc, char* argv[]) {
   gsExprEvaluator<> expression_evaluator(expr_assembler);
 
   // Generate Paraview File
-  gsInfo << "Starting the export ..." << std::flush;
+  gsInfo << "Starting the paraview export ..." << std::flush;
   if (plot) {
-    expression_evaluator.options().setSwitch("plot.elements", false);
-    expression_evaluator.writeParaview(solution_expression, geom_expr,
-                                       "solution");
+    gsParaviewCollection collection("ParaviewOutput/solution",
+                                    &expression_evaluator);
+    collection.options().setSwitch("plotElements", true);
+    collection.options().setInt("plotElements.resolution", sample_rate);
+    collection.newTimeStep(&mp);
+    collection.addField(solution_expression, "numerical solution");
+    collection.saveTimeStep();
+    collection.save();
 
-    gsFileManager::open("solution.pvd");
+  } else {
+    gsInfo << "skipping";
   }
+  gsInfo << "\tFinished" << std::endl;
   //! [Export visualization in ParaView]
 
   // Export solution file as xml
+  gsInfo << "Starting the xml export ..." << std::flush;
   if (export_xml) {
     gsMultiPatch<> mpsol;
     gsMatrix<> full_solution;
@@ -415,10 +378,8 @@ int main(int argc, char* argv[]) {
     solution_expression.extractFull(full_solution);
     output << full_solution;
     output.save("solution-field.xml");
-  }
-
-  if (!plot && !export_xml) {
-    gsInfo << "... No output created ...";
+  } else {
+    gsInfo << "skipping";
   }
   gsInfo << "\tFinished" << std::endl;
 
@@ -566,28 +527,14 @@ int main(int argc, char* argv[]) {
       ///////////////////////////
       const auto sensitivities =
           lagrange_multipliers.transpose() * expr_assembler.matrix();
-      gsInfo << "Computed Sensitivities : " << sensitivities << std::endl;
+      gsDofMapper dof_mapper = u_trial.mapper();
 
-      /////////////////////////////////////////
-      // This section is meant for DEBUGGING //
-      /////////////////////////////////////////
+      const gsMatrix<>& parameter_sensitivity = GetParameterSensitivities(
+          fn_param, numRefine, mp.geoDim(), dof_mapper);
 
-      if (fd_test) {
-        expr_assembler.assemble(LF_1);
-        expr_assembler.assemble(BL_mu2);
-        expr_assembler.assemble(BL_mu1);
-        expr_assembler.assemble(BL_lambda);
-        // Assemble
-        gsMatrix<> matrix = expr_assembler.matrix();
-        gsInfo << "First part of the matrix computed : \n"
-               << matrix << std::endl;
-        const auto rhs_orig = expr_assembler.rhs();
-        auto rhs_of_fd_system = ComputeSensitivityFD(fn, lame_lambda, lame_mu,
-                                                     rho, numRefine, solVector);
-
-        gsInfo << "FD Approximation for lambda part of matrix assembly is:\n"
-               << (rhs_of_fd_system - rhs_orig) / ddx << std::endl;
-      }
+      // Check DEBUG
+      gsInfo << "Sensitivity is " << sensitivities * parameter_sensitivity
+             << std::endl;
     }
   }
 
