@@ -496,9 +496,6 @@ int main(int argc, char* argv[]) {
           lame_lambda * BL_lambda_2_dx * BL_lambda_1 * meas_expr -
           lame_lambda * BL_lambda_2 * BL_lambda_1_dx * meas_expr;  // validated
 
-      // Assemble
-      expr_assembler.assemble(BL_lambda_dx);
-
       // 2. Bilinear form of mu (first part)
       // BL_mu1_2 seems to be in a weird order with [jac0, jac2] leading
       // to [2x(2nctps)]
@@ -518,11 +515,6 @@ int main(int argc, char* argv[]) {
       auto BL_mu1_dx2 = lame_mu * frobenius(BL_mu1_2, BL_mu1_1).cwisetr() *
                         meas_expr_dx;  // validated
 
-      // Assemble
-      expr_assembler.assemble(BL_mu1_dx0);
-      expr_assembler.assemble(BL_mu1_dx1);
-      expr_assembler.assemble(BL_mu1_dx2);
-
       // 2. Bilinear form of mu (first part)
       auto BL_mu2_1 =
           ijac(solution_expression, geom_expr).cwisetr();         // validated
@@ -540,18 +532,14 @@ int main(int argc, char* argv[]) {
           lame_mu * frobenius(BL_mu2_2_dx, BL_mu2_1) * meas_expr;  // validated
       auto BL_mu2_dx2 = lame_mu * frobenius(BL_mu2_2, BL_mu2_1).cwisetr() *
                         meas_expr_dx;  // validated
-
-      // Assemble
-      expr_assembler.assemble(BL_mu2_dx0);
-      expr_assembler.assemble(BL_mu2_dx1);
-      expr_assembler.assemble(BL_mu2_dx2);
-
       // Linear Form Part
       auto LF_1 = -rho * u_trial * ff * meas_expr;
       auto LF_1_dx = -rho * u_trial * ff * meas_expr_dx;
 
       // Assemble
-      expr_assembler.assemble(LF_1_dx);
+      expr_assembler.assemble(BL_lambda_dx, BL_mu1_dx0, BL_mu1_dx1, BL_mu1_dx2,
+                              BL_mu2_dx0, BL_mu2_dx1, BL_mu2_dx2, LF_1_dx);
+      assembly_time_adj_ls += timer.stop();
       gsInfo << "\tFinished" << std::endl;
 
       ///////////////////////////
