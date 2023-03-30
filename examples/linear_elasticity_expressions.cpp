@@ -537,8 +537,10 @@ int main(int argc, char* argv[]) {
       auto LF_1_dx = -rho * u_trial * ff * meas_expr_dx;
 
       // Assemble
-      expr_assembler.assemble(BL_lambda_dx, BL_mu1_dx0, BL_mu1_dx1, BL_mu1_dx2,
-                              BL_mu2_dx0, BL_mu2_dx1, BL_mu2_dx2, LF_1_dx);
+      expr_assembler.assemble(BL_lambda_dx + BL_mu1_dx0 + BL_mu1_dx2 +
+                                  BL_mu2_dx0 + BL_mu2_dx2 + LF_1_dx,
+                              BL_mu1_dx1, BL_mu2_dx1);
+      assembly_time_adj_ls += timer.stop();
       gsInfo << "\tFinished" << std::endl;
 
       ///////////////////////////
