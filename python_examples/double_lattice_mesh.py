@@ -3,6 +3,11 @@ import numpy as np
 import scipy
 import subprocess
 import os
+import time
+
+global geometry_generation_time
+global pde_constraint_time
+
 
 gismo_options = [
     {
@@ -61,7 +66,7 @@ gismo_options = [
                     {
                         "tag": "c",
                         "attributes": {"index": "1"},
-                        "text": "-1000",
+                        "text": "-10000",
                     },
                 ],
             },
@@ -174,11 +179,11 @@ gismo_options = [
         ],
     },
 ]
-
+gus.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling_x = 3
-tiling_y = 2
+tiling_x = 24
+tiling_y = 12
 
 filename = "lattice_structure_" + str(tiling_x) + "x" + str(tiling_y) + ".xml"
 
@@ -204,20 +209,17 @@ def prepare_microstructure(parameters):
         """
         Parametrization Function (determines thickness)
         """
-        return tuple([parameter_spline.evaluate(x).flatten()])
-
+        return parameter_spline.evaluate(x)
 
     def foo_deriv(x):
         basis_function_matrix = np.zeros((x.shape[0],parameter_spline.control_points.shape[0]))
         basis_functions, support = parameter_spline.basis_and_support(x)
         np.put_along_axis(basis_function_matrix, support, basis_functions, axis=1)
-        return [tuple([bf]) for bf in basis_function_matrix.T]
+        return basis_function_matrix.reshape(1, 1, -1)
 
     generator.parametrization_function = foo
     generator.parameter_sensitivity_function = foo_deriv
     my_ms, my_ms_der = generator.create(contact_length=0.5)
-
-
 
     def identifier_function(deformation_function, face_id):
         boundary_spline = deformation_function.extract_boundaries(face_id)[0]
@@ -253,18 +255,14 @@ def prepare_microstructure(parameters):
     multipatch.boundary_from_function(
         identifier_function_neumann, mask=[5]
     )
-
     gus.spline.io.gismo.export(filename, multipatch=multipatch, options=gismo_options, export_fields=True)
 
 def read_jacobians(*ars):
-
     jacs =np.genfromtxt(fname="sensitivities.out")
-    # os.remove("sensitivities.out")
     return jacs
 
 def read_objective_function():
     obj_val =float(np.genfromtxt(fname="objective_function.out"))
-    # os.remove("objective_function.out")
     return obj_val
 
 def run_gismo():
@@ -277,18 +275,24 @@ def run_gismo():
           "-x", 
           filename + ".fields.xml",
           "--output-to-file",
-          "--plot"
+          "-p",
+          "48",
+          "-r",
+          "1"
         ],
         capture_output=True,encoding="ascii")
-    print(text.stdout)
     return text.returncode
 
 def evaluate_iteration(x):
+    start = time.time()
     prepare_microstructure(x)
+    geometry_generation_time = time.time() - start
     run_gismo()
+    pde_constraint_time = time.time() - start - geometry_generation_time
     return read_objective_function()
 
-
+def call_back_optimization(x):
+    print(f"{read_objective_function()} {x}")
 
 def main():
     initial_guess = np.ones((tiling_x*tiling_y,1))*0.10
@@ -304,9 +308,10 @@ def main():
         initial_guess,
         method='SLSQP',
         jac=read_jacobians,
-        bounds = [(0.001,0.2999) for _ in range(tiling_x*tiling_y)],
+        bounds = [(0.0111,0.249) for _ in range(tiling_x*tiling_y)],
         constraints=C2,
-        options={'disp': True}
+        options={'disp': True},
+        callback = call_back_optimization
     )
     
 
