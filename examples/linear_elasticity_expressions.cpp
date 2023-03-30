@@ -115,7 +115,10 @@ gsMatrix<> GetParameterSensitivities(
   gsFileData<> fd(filename);
   gsMultiPatch<> mp;
   fd.getId(0, mp);
-  const int design_dimension = mp.geoDim() / dim;
+  gsMatrix<index_t> patch_supports;
+  fd.getId(10, patch_supports);
+
+  const int design_dimension = patch_supports.col(1).maxCoeff() + 1;
   gsInfo << "Parameter dimensionality " << design_dimension << std::endl;
 
   // h-refine each basis
@@ -124,23 +127,29 @@ gsMatrix<> GetParameterSensitivities(
   }
 
   // Start the assignement
-  gsMatrix<> sensitivities;
+  gsSparseMatrix<> sensitivities;
   const size_t totalSz = dof_mapper.freeSize();
   sensitivities.resize(totalSz, design_dimension);
-  for (size_t j_patch = 0; j_patch != mp.nPatches(); j_patch++) {
+  for (size_t patch_support{}; patch_support < patch_supports.rows();
+       patch_support++) {
+    size_t j_patch = patch_supports(patch_support, 0);
+    size_t i_design = patch_supports(patch_support, 1);
+    size_t k_index_offset = patch_supports(patch_support, 2);
     for (index_t k_dim = 0; k_dim != dim; k_dim++) {
       for (size_t l_dof = 0; l_dof != dof_mapper.patchSize(j_patch, k_dim);
            l_dof++) {
         if (dof_mapper.is_free(l_dof, j_patch, k_dim)) {
           const int global_id = dof_mapper.index(l_dof, j_patch, k_dim);
-          for (int i_design{}; i_design < design_dimension; i_design++) {
-            sensitivities(global_id, i_design) =
-                mp.patch(j_patch).coef(l_dof, k_dim + i_design * dim);
-          };
-        }
+          sensitivities(global_id, i_design) =
+              mp.patch(j_patch).coef(l_dof, k_dim + k_index_offset * dim);
+        };
       }
     }
   }
+  // for (size_t j_patch = 0; j_patch != mp.nPatches(); j_patch++) {
+  //         for (int i_design{}; i_design < design_dimension; i_design++) {
+  //     }
+  // }
   return sensitivities;
 }
 
