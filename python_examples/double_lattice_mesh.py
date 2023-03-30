@@ -182,7 +182,7 @@ gismo_options = [
 gus.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling_x = 4
+tiling_x = 2
 tiling_y = 2
 nthreads=8
 
@@ -258,7 +258,7 @@ def prepare_microstructure(parameters):
     )
     gus.spline.io.gismo.export(filename, multipatch=multipatch, options=gismo_options, export_fields=True)
 
-def read_jacobians(*ars):
+def read_jacobians():
     jacs =np.genfromtxt(fname="sensitivities.out")
     return jacs
 
@@ -270,22 +270,24 @@ def run_gismo(sensitivities=False, plot=False):
     process_call = [
           "./linear_elasticity_expressions",
           "-f",
-          filename,
-          "-p",
+          filename, 
+          "-p", 
           str(nthreads),
           "-r",
-          "1"
+          "1",
+          "--compute-objective-function",
+          "--output-to-file"
         ]
     if sensitivities:
-        process_call += ["--compute-objective-function",
+        process_call += [
           "--compute-sensitivities",
           "-x", 
-          filename + ".fields.xml",
-          "--output-to-file"]
+          filename + ".fields.xml"]
     if plot:
         process_call += [
             "--plot"
         ]
+    print(' '.join(process_call))
     text = subprocess.run(process_call,
         capture_output=True,encoding="ascii")
     return text.returncode
@@ -294,9 +296,17 @@ def evaluate_iteration(x):
     start = time.time()
     prepare_microstructure(x)
     geometry_generation_time = time.time() - start
-    run_gismo(sensitivities=True)
+    run_gismo(sensitivities=False)
     pde_constraint_time = time.time() - start - geometry_generation_time
     return read_objective_function()
+
+def evaluate_jacobian(x):
+    start = time.time()
+    prepare_microstructure(x)
+    geometry_generation_time = time.time() - start
+    run_gismo(sensitivities=True)
+    pde_constraint_time = time.time() - start - geometry_generation_time
+    return read_jacobians()
 
 def call_back_optimization(x):
     print(f"{read_objective_function()} {x}")
@@ -314,7 +324,7 @@ def main():
         evaluate_iteration,
         initial_guess,
         method='SLSQP',
-        jac=read_jacobians,
+        jac=evaluate_jacobian,
         bounds = [(0.0111,0.249) for _ in range(tiling_x*tiling_y)],
         constraints=C2,
         options={'disp': True},
