@@ -130,7 +130,7 @@ gsMatrix<> GetParameterSensitivities(
   gsSparseMatrix<> sensitivities;
   const size_t totalSz = dof_mapper.freeSize();
   sensitivities.resize(totalSz, design_dimension);
-  for (int patch_support{}; patch_support < patch_supports.rows();
+  for (size_t patch_support{}; patch_support < patch_supports.rows();
        patch_support++) {
     size_t j_patch = patch_supports(patch_support, 0);
     size_t i_design = patch_supports(patch_support, 1);
@@ -158,13 +158,6 @@ int main(int argc, char* argv[]) {
   // Global Options //
   ////////////////////
   constexpr const int solution_field_dimension{2};
-
-  // Setup values for timing
-  double setup_time(0), assembly_time_ls(0), solving_time_ls(0),
-      assembly_time_adj_ls(0), solving_time_adj_ls(0),
-      objective_function_time(0), plotting_time(0);
-  gsStopwatch timer;
-  timer.restart();
 
   ////////////////////////////////
   // Parse Command Line Options //
@@ -308,6 +301,10 @@ int main(int argc, char* argv[]) {
   gsMatrix<> solVector;
   solution solution_expression = expr_assembler.getSolution(u_trial, solVector);
 
+  // Setup values for timing
+  double setup_time(0), ma_time(0), slv_time(0);
+  gsStopwatch timer;
+
   u_trial.setup(bc, dirichlet::l2Projection, 0);
 
   // Initialize the system
@@ -344,7 +341,7 @@ int main(int argc, char* argv[]) {
   expr_assembler.assembleBdr(bc.get("Neumann"),
                              u_trial * g_N * nv(geom_expr).norm());
 
-  assembly_time_ls += timer.stop();
+  ma_time += timer.stop();
   gsInfo << "\t\tFinished" << std::endl;
 
   ///////////////////
@@ -359,8 +356,8 @@ int main(int argc, char* argv[]) {
   gsSparseSolver<>::CGDiagonal solver;
   solver.compute(matrix_in_initial_configuration);
   solVector = solver.solve(expr_assembler.rhs());
-  solving_time_ls += timer.stop();
-  gsInfo << "\tFinished" << std::endl;
+  slv_time += timer.stop();
+  gsInfo << "\t\t\tFinished" << std::endl;
 
   //////////////////////////////
   // Export and Visualization //
@@ -369,7 +366,6 @@ int main(int argc, char* argv[]) {
 
   // Generate Paraview File
   gsInfo << "Starting the paraview export ..." << std::flush;
-  timer.restart();
   if (plot) {
     gsParaviewCollection collection("ParaviewOutput/solution",
                                     &expression_evaluator);
@@ -399,15 +395,13 @@ int main(int argc, char* argv[]) {
   } else {
     gsInfo << "skipping";
   }
-  plotting_time += timer.stop();
-  gsInfo << "\t\tFinished" << std::endl;
+  gsInfo << "\tFinished" << std::endl;
 
   ////////////////////////////////////////////////////
   // Optimization Requirements - Objective Function //
   ////////////////////////////////////////////////////
   if (compute_objective_function) {
     gsInfo << "Computing the objective function value ..." << std::flush;
-    timer.restart();
     // Norm of displacement in Neumann region
     expr_assembler.clearRhs();
     space u_trial_single_var = expr_assembler.getSpace(function_basis, 1);
@@ -418,14 +412,14 @@ int main(int argc, char* argv[]) {
         u_trial_single_var * (solution_expression.tr() * solution_expression) *
             nv(geom_expr).norm());
     const auto objective_function_value = expr_assembler.rhs().sum();
-    gsInfo << "\tFinished" << std::endl;
+    gsInfo << "\tFinished Vaule : " << std::setprecision(20)
+           << objective_function_value << std::endl;
 
     if (output_to_file) {
       std::ofstream objective_function_file("objective_function.out");
       objective_function_file << std::setprecision(25)
                               << objective_function_value;
       objective_function_file.close();
-      objective_function_time += timer.stop();
     }
 
     // Assemble derivatives of objective function with respect to field
@@ -434,13 +428,11 @@ int main(int argc, char* argv[]) {
       // Derivative of Objective Function //
       //////////////////////////////////////
       gsInfo << "Computing the objective function derivative ..." << std::flush;
-      timer.restart();
       expr_assembler.clearRhs();
       expr_assembler.assembleBdr(
           bc.get("Neumann"),
           2 * u_trial * solution_expression * nv(geom_expr).norm());
       const auto objective_function_derivative = expr_assembler.rhs();
-      objective_function_time += timer.stop();
       gsInfo << "\tFinished" << std::endl;
 
       /////////////////////////////////
@@ -457,7 +449,7 @@ int main(int argc, char* argv[]) {
       gsMatrix<> lagrange_multipliers;
       solverAdjoint.compute(matrix_in_initial_configuration);
       lagrange_multipliers = -solverAdjoint.solve(expr_assembler.rhs());
-      solving_time_adj_ls += timer.stop();
+      slv_time += timer.stop();
 
       gsInfo << "\t\tFinished" << std::endl;
 
@@ -465,7 +457,6 @@ int main(int argc, char* argv[]) {
       // Derivative of the LHS Form //
       ////////////////////////////////
       gsInfo << "Start assembly of derivatives of linear system" << std::flush;
-      timer.restart();
       expr_assembler.clearRhs();
       expr_assembler.clearMatrix();
 
@@ -496,6 +487,9 @@ int main(int argc, char* argv[]) {
           lame_lambda * BL_lambda_2_dx * BL_lambda_1 * meas_expr -
           lame_lambda * BL_lambda_2 * BL_lambda_1_dx * meas_expr;  // validated
 
+      // Assemble
+      expr_assembler.assemble(BL_lambda_dx);
+
       // 2. Bilinear form of mu (first part)
       // BL_mu1_2 seems to be in a weird order with [jac0, jac2] leading
       // to [2x(2nctps)]
@@ -515,6 +509,11 @@ int main(int argc, char* argv[]) {
       auto BL_mu1_dx2 = lame_mu * frobenius(BL_mu1_2, BL_mu1_1).cwisetr() *
                         meas_expr_dx;  // validated
 
+      // Assemble
+      expr_assembler.assemble(BL_mu1_dx0);
+      expr_assembler.assemble(BL_mu1_dx1);
+      expr_assembler.assemble(BL_mu1_dx2);
+
       // 2. Bilinear form of mu (first part)
       auto BL_mu2_1 =
           ijac(solution_expression, geom_expr).cwisetr();         // validated
@@ -532,15 +531,19 @@ int main(int argc, char* argv[]) {
           lame_mu * frobenius(BL_mu2_2_dx, BL_mu2_1) * meas_expr;  // validated
       auto BL_mu2_dx2 = lame_mu * frobenius(BL_mu2_2, BL_mu2_1).cwisetr() *
                         meas_expr_dx;  // validated
+
+      // Assemble
+      expr_assembler.assemble(BL_mu2_dx0);
+      expr_assembler.assemble(BL_mu2_dx1);
+      expr_assembler.assemble(BL_mu2_dx2);
+
       // Linear Form Part
       auto LF_1 = -rho * u_trial * ff * meas_expr;
       auto LF_1_dx = -rho * u_trial * ff * meas_expr_dx;
 
       // Assemble
-      expr_assembler.assemble(BL_lambda_dx, BL_mu1_dx0, BL_mu1_dx1, BL_mu1_dx2,
-                              BL_mu2_dx0, BL_mu2_dx1, BL_mu2_dx2, LF_1_dx);
-      assembly_time_adj_ls += timer.stop();
-      gsInfo << "\tFinished" << std::endl;
+      expr_assembler.assemble(LF_1_dx);
+      gsInfo << "\t\tFinished" << std::endl;
 
       ///////////////////////////
       // Compute sensitivities //
@@ -566,20 +569,10 @@ int main(int argc, char* argv[]) {
   }
 
   // User output infor timings
-  gsInfo << "\n\nTotal time: "
-         << setup_time + assembly_time_ls + solving_time_ls +
-                assembly_time_adj_ls + solving_time_adj_ls +
-                objective_function_time + plotting_time
-         << "\n";
-  gsInfo << "                       Setup: " << setup_time << "\n";
-  gsInfo << "      Assembly Linear System: " << assembly_time_ls << "\n";
-  gsInfo << "       Solving Linear System: " << solving_time_ls << "\n";
-  gsInfo << " Assembly objective function: " << assembly_time_ls << "\n";
-  gsInfo << "     Assembly adjoint system: " << assembly_time_adj_ls << "\n";
-  gsInfo << "      Solving adjoint system: " << solving_time_adj_ls << "\n";
-  gsInfo << "                    Plotting: " << plotting_time << "\n"
-         << std::flush;
-
+  gsInfo << "\n\nTotal time: " << setup_time + ma_time + slv_time << "\n";
+  gsInfo << "     Setup: " << setup_time << "\n";
+  gsInfo << "  Assembly: " << ma_time << "\n";
+  gsInfo << "   Solving: " << slv_time << "\n" << std::flush;
   return EXIT_SUCCESS;
 
 }  // end main
