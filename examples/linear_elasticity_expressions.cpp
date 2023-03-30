@@ -539,7 +539,6 @@ int main(int argc, char* argv[]) {
       // Assemble
       expr_assembler.assemble(BL_lambda_dx, BL_mu1_dx0, BL_mu1_dx1, BL_mu1_dx2,
                               BL_mu2_dx0, BL_mu2_dx1, BL_mu2_dx2, LF_1_dx);
-      assembly_time_adj_ls += timer.stop();
       gsInfo << "\tFinished" << std::endl;
 
       ///////////////////////////
