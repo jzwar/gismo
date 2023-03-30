@@ -182,8 +182,9 @@ gismo_options = [
 gus.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling_x = 24
-tiling_y = 12
+tiling_x = 4
+tiling_y = 2
+nthreads=8
 
 filename = "lattice_structure_" + str(tiling_x) + "x" + str(tiling_y) + ".xml"
 
@@ -265,21 +266,27 @@ def read_objective_function():
     obj_val =float(np.genfromtxt(fname="objective_function.out"))
     return obj_val
 
-def run_gismo():
-    text = subprocess.run([
+def run_gismo(sensitivities=False, plot=False):
+    process_call = [
           "./linear_elasticity_expressions",
           "-f",
           filename,
-          "--compute-objective-function",
+          "-p",
+          str(nthreads),
+          "-r",
+          "1"
+        ]
+    if sensitivities:
+        process_call += ["--compute-objective-function",
           "--compute-sensitivities",
           "-x", 
           filename + ".fields.xml",
-          "--output-to-file",
-          "-p",
-          "48",
-          "-r",
-          "1"
-        ],
+          "--output-to-file"]
+    if plot:
+        process_call += [
+            "--plot"
+        ]
+    text = subprocess.run(process_call,
         capture_output=True,encoding="ascii")
     return text.returncode
 
@@ -287,7 +294,7 @@ def evaluate_iteration(x):
     start = time.time()
     prepare_microstructure(x)
     geometry_generation_time = time.time() - start
-    run_gismo()
+    run_gismo(sensitivities=True)
     pde_constraint_time = time.time() - start - geometry_generation_time
     return read_objective_function()
 
@@ -303,7 +310,7 @@ def main():
     d = tiling_x * tiling_y * 0.10
     C2 = scipy.optimize.LinearConstraint(A, c, d)
 
-    scipy.optimize.minimize(
+    optim = scipy.optimize.minimize(
         evaluate_iteration,
         initial_guess,
         method='SLSQP',
@@ -313,6 +320,9 @@ def main():
         options={'disp': True},
         callback = call_back_optimization
     )
+    # Finalize
+    prepare_microstructure(optim.x)
+    run_gismo(sensitivities=False, plot=True)
     
 
 if __name__ == "__main__":
