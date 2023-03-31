@@ -410,12 +410,12 @@ int main(int argc, char* argv[]) {
     timer.restart();
     // Norm of displacement in Neumann region
     expr_assembler.clearRhs();
-    space u_trial_single_var = expr_assembler.getSpace(function_basis, 1);
+    // space u_trial_single_var = expr_assembler.getSpace(function_basis, 1);
     // Assemble with test function and using the sum over all integrals (using
     // partition of unity), this is a bit inefficient but only on a subdomain
     expr_assembler.assembleBdr(
         bc.get("Neumann"),
-        u_trial_single_var * (solution_expression.tr() * solution_expression) *
+        u_trial[0] * (solution_expression.tr() * solution_expression) *
             nv(geom_expr).norm());
     const auto objective_function_value = expr_assembler.rhs().sum();
     gsInfo << "\tFinished" << std::endl;
@@ -466,8 +466,8 @@ int main(int argc, char* argv[]) {
       ////////////////////////////////
       gsInfo << "Start assembly of derivatives of linear system" << std::flush;
       timer.restart();
-      expr_assembler.clearRhs();
-      expr_assembler.clearMatrix();
+      expr_assembler.initMatrix();
+      expr_assembler.initVector();
 
       // Auxiliary expressions
       auto jacobian = jac(geom_expr);                      // validated
