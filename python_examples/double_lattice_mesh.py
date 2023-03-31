@@ -3,11 +3,6 @@ import numpy as np
 import scipy
 import subprocess
 import os
-import time
-
-global geometry_generation_time
-global pde_constraint_time
-
 
 gismo_options = [
     {
@@ -182,9 +177,11 @@ gismo_options = [
 gus.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling_x = 2
-tiling_y = 2
-nthreads=8
+tiling_x = 24
+tiling_y = 12
+nthreads= 24
+load_b_tiles = 2
+para_deg = 2
 
 filename = "lattice_structure_" + str(tiling_x) + "x" + str(tiling_y) + ".xml"
 
@@ -200,11 +197,18 @@ def prepare_microstructure(parameters):
     generator.deformation_function = deformation_function
     generator.tiling=[1,1]
     generator.microtile = gus.spline.microstructure.tiles.DoubleLatticeTile()
-
+    
+    
+    iknots = [i * (1/(tiling_x - para_deg)) for i in range(1,tiling_x - para_deg)]
+    jknots = [i * (1/(tiling_y - para_deg)) for i in range(1,tiling_y - para_deg)]
+    pdegrees=[2, 2]
+    pknot_vectors=[ [0] * (para_deg + 1) + k + [1] * (para_deg + 1) for k in 
+                  [iknots,jknots]]
+    pcontrol_points=parameters.reshape(tiling_x * tiling_y,1)
     parameter_spline = gus.BSpline(
-        degrees=[0,0],
-        knot_vectors=deformation_function.unique_knots,
-        control_points=parameters.reshape(tiling_x * tiling_y,1)
+        degrees=pdegrees,
+        knot_vectors=pknot_vectors,
+        control_points=pcontrol_points
     )
     def foo(x):
         """
@@ -234,7 +238,7 @@ def prepare_microstructure(parameters):
         return identifier_function
 
     def identifier_function_neumann(x):
-        return (x[:,0] >= (tiling_x - 1) / tiling_x * length-1e-12)
+        return (x[:,0] >= (tiling_x - load_b_tiles) / tiling_x * length-1e-12)
 
 
     multipatch = gus.spline.splinepy.Multipatch(my_ms)
@@ -266,15 +270,13 @@ def read_objective_function():
     obj_val =float(np.genfromtxt(fname="objective_function.out"))
     return obj_val
 
-def run_gismo(sensitivities=False, plot=False):
+def run_gismo(sensitivities=False, plot=False, refinement=False):
     process_call = [
           "./linear_elasticity_expressions",
           "-f",
           filename, 
           "-p", 
           str(nthreads),
-          "-r",
-          "1",
           "--compute-objective-function",
           "--output-to-file"
         ]
@@ -287,29 +289,27 @@ def run_gismo(sensitivities=False, plot=False):
         process_call += [
             "--plot"
         ]
-    print(' '.join(process_call))
+    if refinement:
+        process_call += [
+          "-r",
+          "1",
+          ]
     text = subprocess.run(process_call,
         capture_output=True,encoding="ascii")
     return text.returncode
 
 def evaluate_iteration(x):
-    start = time.time()
     prepare_microstructure(x)
-    geometry_generation_time = time.time() - start
-    run_gismo(sensitivities=False)
-    pde_constraint_time = time.time() - start - geometry_generation_time
+    run_gismo(sensitivities=False, refinement=True)
     return read_objective_function()
 
 def evaluate_jacobian(x):
-    start = time.time()
     prepare_microstructure(x)
-    geometry_generation_time = time.time() - start
-    run_gismo(sensitivities=True)
-    pde_constraint_time = time.time() - start - geometry_generation_time
+    run_gismo(sensitivities=True, refinement=True)
     return read_jacobians()
 
 def call_back_optimization(x):
-    print(f"{read_objective_function()} {x}")
+    print(f"{read_objective_function()}:" + "  ".join(str(xx) for xx in x.tolist()))
 
 def main():
     initial_guess = np.ones((tiling_x*tiling_y,1))*0.10
@@ -332,7 +332,7 @@ def main():
     )
     # Finalize
     prepare_microstructure(optim.x)
-    run_gismo(sensitivities=False, plot=True)
+    run_gismo(sensitivities=False, plot=True, refinement=True)
     
 
 if __name__ == "__main__":
