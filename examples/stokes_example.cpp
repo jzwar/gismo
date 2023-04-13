@@ -227,10 +227,11 @@ int main(int argc, char* argv[]) {
   // Daniel, please ignore this
   gsInfo << "complete_solution.size() : " << complete_solution.size();
   gsInfo << "What is freesize " << p_trial.mapper().freeSize();
+  gsInfo << "What is freesize " << p_trial.mapper().freeSize();
   pressure_solution =
       complete_solution.block(0, 0, p_trial.mapper().freeSize(), 1);
   gsInfo << "Yeahi 1 " << std::endl;
-  velocity_solution = complete_solution.block(0, p_trial.mapper().freeSize(),
+  velocity_solution = complete_solution.block(p_trial.mapper().freeSize(), 0,
                                               u_trial.mapper().freeSize(), 1);
 
   solving_time_ls += timer.stop();
