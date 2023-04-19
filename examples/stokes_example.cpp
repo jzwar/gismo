@@ -1,13 +1,7 @@
-/** @file linear_elasticity_expressions.cpp
+/** @file stokes_example.cpp
 
-    @brief Linear elasticity problem with adjoint approach for sensitivity
+    @brief Steady Stokes problem with adjoint approach for sensitivity
    analysis
-
-    This file is part of the G+Smo library.
-
-    This Source Code Form is subject to the terms of the Mozilla Public
-    License, v. 2.0. If a copy of the MPL was not distributed with this
-    file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include <gismo.h>
@@ -24,7 +18,8 @@ int main(int argc, char* argv[]) {
   ////////////////////
   // Global Options //
   ////////////////////
-  constexpr const int solution_field_dimension{2};
+  constexpr const int pressure_field_dimension{1};
+  constexpr const int velocity_field_dimension{2};
 
   // Setup values for timing
   double setup_time(0), assembly_time_ls(0), solving_time_ls(0),
@@ -51,25 +46,21 @@ int main(int argc, char* argv[]) {
              sample_rate);
 
   // Material constants
-  real_t viscosity{2000000}, rho{1000};
-  cmd.addReal("L", "firstLame", "First Lame constant, material parameter",
-              viscosity);
-  cmd.addReal("R", "rho", "Density", rho);
+  real_t viscosity{2000000};
+  cmd.addReal("v", "visc", "Viscosity", viscosity);
 
   // Mesh options
   index_t numRefine = 0;
-  cmd.addInt("r", "uniformRefine", "Number of Uniform h-refinement loops",
+  cmd.addInt("r", "uniformRefine", "Number of uniform h-refinement loops",
              numRefine);
 
-  std::string fn("../playground/linear_elasticity/askew_rectangle_mesh.xml");
+  std::string fn("../../linear_elasticity/askew_rectangle_mesh.xml");
   cmd.addString("f", "file", "Input XML file", fn);
 
   // A few more mesh options
-  int mp_id{0}, source_id{1}, bc_id{2}, ass_opt_id{3};
+  int mp_id{0}, bc_id{2}, ass_opt_id{3};
   cmd.addInt("m", "multipach_id", "ID of the multipatch mesh in mesh file",
              mp_id);
-  cmd.addInt("s", "source_id", "ID of the source term function in mesh file",
-             source_id);
   cmd.addInt("b", "boundary_id",
              "ID of the boundary condition function in mesh file", bc_id);
   cmd.addInt("a", "assembly_options_id",
@@ -88,17 +79,16 @@ int main(int argc, char* argv[]) {
 
   // Import mesh and load relevant information
   gsFileData<> fd(fn);
-  gsInfo << "Loaded file " << fd.lastPath() << "\n";
+  gsInfo << "Loaded file " << fd.lastPath() << std::endl;
+  // retrieve multi-patch data
   gsMultiPatch<> mp;
   fd.getId(mp_id, mp);
-
-  gsFunctionExpr<> f;
-  fd.getId(source_id, f);
-  gsInfo << "Source function " << f << "\n";
+  // retrieve boundary condition data
   gsBoundaryConditions<> bc;
   fd.getId(bc_id, bc);
   bc.setGeoMap(mp);
-  gsInfo << "Boundary conditions:\n" << bc << "\n";
+  gsInfo << "Boundary conditions:\n" << bc << std::endl;
+  // retrieve assembly options
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
 
@@ -107,7 +97,7 @@ int main(int argc, char* argv[]) {
   //! [Refinement]
   gsMultiBasis<> function_basis(mp, true);  // true: poly-splines (not NURBS)
 
-  // h-refine each basis
+  // h-refine each basis (for performing the analysis)
   for (int r = 0; r < numRefine; ++r) {
     function_basis.uniformRefine();
   }
@@ -115,21 +105,22 @@ int main(int argc, char* argv[]) {
   // Output user information
   gsInfo << "Patches: " << mp.nPatches()
          << ", min-degree: " << function_basis.minCwiseDegree()
-         << ", min-degree: " << function_basis.maxCwiseDegree() << "\n";
+         << ", max-degree: " << function_basis.maxCwiseDegree() << std::endl;
 #ifdef _OPENMP
-  gsInfo << "Available threads: " << omp_get_max_threads() << "\n";
+  gsInfo << "Available threads: " << omp_get_max_threads() << std::endl;
   omp_set_num_threads(std::min(omp_get_max_threads(), n_omp_threads));
-  gsInfo << "Number of threads: " << omp_get_num_threads() << "\n";
+  gsInfo << "Number of threads: " << omp_get_num_threads() << std::endl;
 #endif
 
   ///////////////////
   // Problem Setup //
   ///////////////////
 
-  // Expression assembler
+  // Construct expression assembler 
+  // (takes number of test and solution function spaces as arguments)
   gsExprAssembler<> expr_assembler(2, 2);
   expr_assembler.setOptions(Aopt);
-  gsInfo << "Active options:\n" << expr_assembler.options() << "\n";
+  gsInfo << "Active options:\n" << expr_assembler.options() << std::endl;
 
   // Elements used for numerical integration
   expr_assembler.setIntegrationElements(function_basis);
@@ -138,21 +129,27 @@ int main(int argc, char* argv[]) {
   geometryMap geom_expr = expr_assembler.getMap(mp);
 
   // Set the discretization space
-  space u_trial =
-      expr_assembler.getSpace(function_basis, solution_field_dimension, 1);
   space p_trial =
-      expr_assembler.getSpace(function_basis, 1, 0);  // Might be 2 as v is 2D
+      expr_assembler.getSpace(function_basis, pressure_field_dimension, 0);
+  gsInfo << "Solution space for pressure (id=" << p_trial.id() << ") has " 
+         << p_trial.rows() << " rows and " << p_trial.cols() << " columns." 
+         << std::endl;
+  space u_trial =
+      expr_assembler.getSpace(function_basis, velocity_field_dimension, 1);
+  gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has " 
+         << u_trial.rows() << " rows and " << u_trial.cols() << " columns." 
+         << std::endl;
 
   // Set the source term
-  auto ff = expr_assembler.getCoeff(f, geom_expr);
+  // auto ff = expr_assembler.getCoeff(f, geom_expr);
 
   // Solution vector and solution variable
-  gsMatrix<> velocity_solution;
-  solution velocity_solution_expression =
-      expr_assembler.getSolution(u_trial, velocity_solution);
   gsMatrix<> pressure_solution;
   solution pressure_solution_expression =
       expr_assembler.getSolution(p_trial, pressure_solution);
+  gsMatrix<> velocity_solution;
+  solution velocity_solution_expression =
+      expr_assembler.getSolution(u_trial, velocity_solution);
 
   // Initialize Dirichlet bcs for velocity field
   u_trial.setup(bc, dirichlet::l2Projection, 0);
@@ -163,6 +160,8 @@ int main(int argc, char* argv[]) {
 
   gsInfo << "Number of degrees of freedom : " << expr_assembler.numDofs()
          << std::endl;
+  gsInfo << "Number of blocks in the system matrix : " 
+         << expr_assembler.numBlocks() << std::endl;
 
   //////////////
   // Assembly //
@@ -198,14 +197,7 @@ int main(int argc, char* argv[]) {
   auto bilin_mu_2 =
       viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
 
-  print_function_expressions("bilin_mu_1", bilin_mu_1);
-  expr_assembler.assemble(bilin_mu_2);
-
-  std::ofstream matrix("matrix.tsv");
-  matrix << static_cast<gsMatrix<>>(expr_assembler.matrix()) << std::endl;
-  matrix.close();
-
-  expr_assembler.assemble(bilin_conti, bilin_press, bilin_mu_1);
+  expr_assembler.assemble(bilin_conti, bilin_press, bilin_mu_1, bilin_mu_2);
 
   assembly_time_ls += timer.stop();
   gsInfo << "\t\tFinished" << std::endl;
@@ -216,25 +208,34 @@ int main(int argc, char* argv[]) {
   gsInfo << "Solving the linear system of equations ..." << std::flush;
   timer.restart();
   const auto& matrix_in_initial_configuration = expr_assembler.matrix();
-  const auto rhs_vector = expr_assembler.rhs();
+  const auto& rhs_vector = expr_assembler.rhs();
 
   // Initialize linear solver
   gsSparseSolver<>::CGDiagonal solver;
   solver.compute(matrix_in_initial_configuration);
   gsMatrix<> complete_solution;
-  complete_solution = solver.solve(expr_assembler.rhs());
-
-  // Daniel, please ignore this
-  gsInfo << "complete_solution.size() : " << complete_solution.size();
-  gsInfo << "What is freesize " << p_trial.mapper().freeSize();
-  pressure_solution =
-      complete_solution.block(0, 0, p_trial.mapper().freeSize(), 1);
-  gsInfo << "Yeahi 1 " << std::endl;
-  velocity_solution = complete_solution.block(0, p_trial.mapper().freeSize(),
-                                              u_trial.mapper().freeSize(), 1);
+  complete_solution = solver.solve(rhs_vector);
 
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
+
+  // print the solution matrices before extraction:
+  gsInfo << "before extraction:" << std::endl;
+  gsInfo << "pressure_solution:\n" << pressure_solution << std::endl;
+  gsInfo << "velocity_solution:\n" << velocity_solution << std::endl;
+  // Daniel, please ignore this
+  gsInfo << "complete_solution.size() : " << complete_solution.size() << std::endl;
+  gsInfo << "p_trial.mapper().freeSize() " << p_trial.mapper().freeSize() << std::endl;
+  gsInfo << "u_trial.mapper().freeSize() " << u_trial.mapper().freeSize() << std::endl;
+  pressure_solution =
+      complete_solution.block(0, 0, p_trial.mapper().freeSize(), 1);
+  velocity_solution = complete_solution.block(p_trial.mapper().freeSize(), 0,
+                                              u_trial.mapper().freeSize(), 1);
+  // print the solution matrices after extraction:
+  gsInfo << "after extraction:" << std::endl;
+  gsInfo << "pressure_solution:\n" << pressure_solution << std::endl;
+  gsInfo << "velocity_solution:\n" << velocity_solution << std::endl;
+
 
   //////////////////////////////
   // Export and Visualization //
@@ -282,11 +283,11 @@ int main(int argc, char* argv[]) {
          << setup_time + assembly_time_ls + solving_time_ls +
                 assembly_time_adj_ls + solving_time_adj_ls +
                 objective_function_time + plotting_time
-         << "\n";
-  gsInfo << "                       Setup: " << setup_time << "\n";
-  gsInfo << "      Assembly Linear System: " << assembly_time_ls << "\n";
-  gsInfo << "       Solving Linear System: " << solving_time_ls << "\n";
-  gsInfo << "                    Plotting: " << plotting_time << "\n"
+         << std::endl;
+  gsInfo << "                       Setup: " << setup_time << std::endl;
+  gsInfo << "      Assembly Linear System: " << assembly_time_ls << std::endl;
+  gsInfo << "       Solving Linear System: " << solving_time_ls << std::endl;
+  gsInfo << "                    Plotting: " << plotting_time << std::endl
          << std::flush;
 
   return EXIT_SUCCESS;

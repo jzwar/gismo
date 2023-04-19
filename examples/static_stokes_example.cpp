@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
     space u_trial =
         expr_assembler.getSpace(function_basis, VELOCITY_DIM, VELOCITY_ID);
     // Set the boundary conditions for the velocity field
-    u_trial.setup(bcInfo, dirichlet::l2Projection, 0);
+    u_trial.setup(bcInfo, dirichlet::l2Projection);
     // Initialize the system
     expr_assembler.initSystem();
     setup_time += timer.stop();

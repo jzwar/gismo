@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+
+  <!-- Multi-patch geometry with parametric dimension 2 -->
+  <MultiPatch id="0" parDim="2">
+    <patches type="id_range">100 100</patches>
+    <interfaces />
+    <boundary name="dirichlet">100 1
+100 2
+100 3
+100 4</boundary>
+  </MultiPatch>
+
+  <!-- Boundary conditions for multi-patch geometry with ID=0-->
+  <boundaryConditions id="2" multipatch="0" >
+    <!-- Function expressions to be evaluated on Dirichtlet boundaries -->
+    <Function type="FunctionExpr" dim="2" index="u_x">2</Function>
+    <Function type="FunctionExpr" dim="2" index="u_y">1</Function>
+    <!-- Use function expression 0 for unknown 1 on dirichlet boundary -->
+    <bc type="Dirichlet" function="u_x" unknown="1" name="dirichlet"></bc>
+    <bc type="Dirichlet" function="u_y" unknown="2" name="dirichlet"></bc>
+  </boundaryConditions>
+
+  <!-- Assembler options -->
+ <OptionList id="3"> 
+  <int label="DirichletStrategy" desc="Method for enforcement of Dirichlet BCs [11..14]" value="11"/>
+  <int label="DirichletValues" desc="Method for computation of Dirichlet DoF values [100..103]" value="101"/>
+  <int label="InterfaceStrategy" desc="Method of treatment of patch interfaces [0..3]" value="1"/>
+  <real label="bdA" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="2"/>
+  <int label="bdB" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="1"/>
+  <real label="bdO" desc="Overhead of sparse mem. allocation: (1+bdO)(bdA*deg + bdB) [0..1]" value="0.333"/>
+  <real label="quA" desc="Number of quadrature points: quA*deg + quB" value="1"/>
+  <int  label="quB" desc="Number of quadrature points: quA*deg + quB" value="1"/>
+  <int label="quRule" desc="Quadrature rule [1:GaussLegendre,2:GaussLobatto]" value="1"/>
+ </OptionList>
+
+  <!-- Multi-patch spline data -->
+  <Geometry type="TensorBSpline2" id="100">
+    <Basis type="TensorBSplineBasis2">
+      <Basis type="BSplineBasis" index="0">
+        <KnotVector degree="2">0.0 0.0 0.0 1.0 1.0 1.0</KnotVector>
+      </Basis>
+      <Basis type="BSplineBasis" index="1">
+        <KnotVector degree="2">0.0 0.0 0.0 1.0 1.0 1.0</KnotVector>
+      </Basis>
+    </Basis>
+    <coefs geoDim="2">
+0.0 0.0
+1.0 0.5
+2.0 0.2
+0.5 1.5
+1.0 1.5
+1.5 1.5
+0.0 3.0
+1.0 2.5
+2.0 3.0</coefs>
+  </Geometry>
+</xml>
