@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
   cmd.addString("f", "file", "Input XML file", fn);
 
   // A few more mesh options
-  int mp_id{0}, bc_id{2}, ass_opt_id{3};
+  int mp_id{0}, bc_id{1}, ass_opt_id{2};
   cmd.addInt("m", "multipach_id", "ID of the multipatch mesh in mesh file",
              mp_id);
   cmd.addInt("b", "boundary_id",
@@ -112,6 +112,12 @@ int main(int argc, char* argv[]) {
   gsInfo << "Number of threads: " << omp_get_num_threads() << std::endl;
 #endif
 
+  // iterate over all boundary segments
+  for (gsMultiPatch<>::const_biterator bit = mp.bBegin(); bit != mp.bEnd(); ++bit)
+  {
+      gsInfo << bit->patch << " " << bit->m_index << std::endl;
+  }
+
   ///////////////////
   // Problem Setup //
   ///////////////////
@@ -139,9 +145,6 @@ int main(int argc, char* argv[]) {
   gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has " 
          << u_trial.rows() << " rows and " << u_trial.cols() << " columns." 
          << std::endl;
-
-  // Set the source term
-  // auto ff = expr_assembler.getCoeff(f, geom_expr);
 
   // Solution vector and solution variable
   gsMatrix<> pressure_solution;

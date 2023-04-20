@@ -2,7 +2,7 @@
 <xml>
 
   <!-- Computational domain -->
-  <MultiPatch parDim="2" id="0">
+  <MultiPatch id="0" parDim="2">
     <patches type="id_range">500 501</patches>
     <interfaces>501 1 500 2 0 1 1 1
     </interfaces>
@@ -10,8 +10,6 @@
       501 4
       500 3
       501 3
-    </boundary>
-    <boundary name="neumann">
       500 4
       500 1
       501 2
@@ -19,27 +17,20 @@
   </MultiPatch>
 
   <!-- The boundary conditions (multipatch=number of patches)-->
-  <boundaryConditions id="2" multipatch="0">
-    <Function type="FunctionExpr" dim="2" index="0">sin(pi*x) * sin(pi*y)</Function>
-    <Function type="FunctionExpr" dim="2" index="1" c="2">
-      <c index="0">pi*cos(pi*x) * sin(pi*y)</c>
-      <c index="1">pi*sin(pi*x) * cos(pi*y)</c>
+  <boundaryConditions id="1" multipatch="0">
+    <!-- Functions that are used to define the boundary conditions -->
+    <Function type="FunctionExpr" dim="2" index="0" c="2">
+      <c index="0">x</c>
+      <c index="0">y</c>
     </Function>
-    <Function type="FunctionExpr" dim="2" index="2">0</Function><!--unused-->
-
-    <!-- Dirichlet conditions (patch,side) -->
-    <bc type="Dirichlet" function="0" unknown="0" name="dirichlet">
-    </bc>
-
-    <bc type="Neumann" function="1" unknown="0" name="neumann">
+    <!-- Assignment of boundaries, function expressions, and unknowns -->
+    <bc type="Dirichlet" function="0" unknown="1" name="dirichlet"> 
+    0 1 0 3 0 4 1 2 1 3 1 4
     </bc>
   </boundaryConditions>
 
-  <!-- The manufactured exact solution (for reference) -->
-  <Function type="FunctionExpr" id="3" dim="2">sin(pi*x) * sin(pi*y)</Function>
-
   <!-- Assembler options -->
- <OptionList id="4">
+ <OptionList id="2">
   <int label="DirichletStrategy" desc="Method for enforcement of Dirichlet BCs [11..14]" value="11"/>
   <int label="DirichletValues" desc="Method for computation of Dirichlet DoF values [100..103]" value="101"/>
   <int label="InterfaceStrategy" desc="Method of treatment of patch interfaces [0..3]" value="1"/>
@@ -49,7 +40,6 @@
   <real label="quA" desc="Number of quadrature points: quA*deg + quB" value="1"/>
   <int  label="quB" desc="Number of quadrature points: quA*deg + quB" value="1"/>
   <int label="quRule" desc="Quadrature rule [1:GaussLegendre,2:GaussLobatto]" value="1"/>
-
  </OptionList>
 
 

@@ -22,15 +22,19 @@ int main(int argc, char* argv[]) {
     // CONSTANTS //
     ///////////////
 
+    // number of spatial dimensions
+    constexpr index_t SPATIAL_DIM = 2;
     // field IDs
     constexpr index_t PRESSURE_ID = 0;
     constexpr index_t VELOCITY_ID = 1;
     // field dimensions
     constexpr index_t PRESSURE_DIM = 1;
-    constexpr index_t VELOCITY_DIM = 2;
+    constexpr index_t VELOCITY_DIM = SPATIAL_DIM;
     // number of solution and test spaces
     constexpr index_t NUM_TRIAL = 2;
     constexpr index_t NUM_TEST = 2;
+    // spline degree for representing the computational domain
+    constexpr index_t SPLINE_DEGREE = 2;
 
     ///////////
     // SETUP //
@@ -92,7 +96,6 @@ int main(int argc, char* argv[]) {
 
     gsInfo << "Constructing geometry ..." << std::endl;
     // Represent the unit square as a multi-patch BSpline of degree 2
-    constexpr index_t SPLINE_DEGREE = 2;
     gsMultiPatch<> patches(*gsNurbsCreator<>::BSplineSquareDeg(SPLINE_DEGREE));
     patches.computeTopology();
     gsInfo << "... Done." << std::endl;
@@ -106,11 +109,11 @@ int main(int argc, char* argv[]) {
     gsBoundaryConditions<> bcInfo;
     // function for the no-slip boundaries 
     // (first parameter is the value, second parameter the domain dimension)
-    gsConstantFunction<> g_noslip(gsVector<>(0.0,0.0), 2);
-    // gsConstantFunction<> g_noslip(0.0, 0.0, 2);
+    gsConstantFunction<> g_noslip(gsVector<>(0.0,0.0), SPATIAL_DIM);
+    // gsConstantFunction<> g_noslip(0.0, 0.0, SPATIAL_DIM);
     // function for the slip part of the boundary
-    gsConstantFunction<> g_wallslip(gsVector<>(1.0,0.0), 2);
-    // gsConstantFunction<> g_wallslip(1.0, 0.0, 2);
+    gsConstantFunction<> g_wallslip(gsVector<>(1.0,0.0), SPATIAL_DIM);
+    // gsConstantFunction<> g_wallslip(1.0, 0.0, SPATIAL_DIM);
     // assign the boundary conditions
     bcInfo.addCondition(0, boundary::west,  condition_type::dirichlet, 
         &g_noslip);
