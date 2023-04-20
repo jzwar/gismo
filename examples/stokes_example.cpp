@@ -15,11 +15,19 @@ typedef gsExprAssembler<>::space space;
 typedef gsExprAssembler<>::solution solution;
 
 int main(int argc, char* argv[]) {
+
   ////////////////////
   // Global Options //
   ////////////////////
-  constexpr const int pressure_field_dimension{1};
-  constexpr const int velocity_field_dimension{2};
+
+  // field IDs
+  constexpr index_t PRESSURE_ID = 0;
+  constexpr index_t VELOCITY_ID = 1;
+  // field dimensions
+  constexpr index_t PRESSURE_DIM = 1;
+  // number of solution and test spaces
+  constexpr index_t NUM_TRIAL = 2;
+  constexpr index_t NUM_TEST = 2;
 
   // Setup values for timing
   double setup_time(0), assembly_time_ls(0), solving_time_ls(0),
@@ -31,6 +39,7 @@ int main(int argc, char* argv[]) {
   ////////////////////////////////
   // Parse Command Line Options //
   ////////////////////////////////
+
   // Title
   gsCmdLine cmd("Stokes Example");
 
@@ -46,7 +55,7 @@ int main(int argc, char* argv[]) {
              sample_rate);
 
   // Material constants
-  real_t viscosity{2000000};
+  real_t viscosity{10};
   cmd.addReal("v", "visc", "Viscosity", viscosity);
 
   // Mesh options
@@ -54,15 +63,15 @@ int main(int argc, char* argv[]) {
   cmd.addInt("r", "uniformRefine", "Number of uniform h-refinement loops",
              numRefine);
 
-  std::string fn("../../linear_elasticity/askew_rectangle_mesh.xml");
+  std::string fn("../../filedata/pde/stokes2d_bvp.xml");
   cmd.addString("f", "file", "Input XML file", fn);
 
   // A few more mesh options
-  int mp_id{0}, bc_id{1}, ass_opt_id{2};
+  index_t mp_id{0}, vel_bc_id{1}, ass_opt_id{10};
   cmd.addInt("m", "multipach_id", "ID of the multipatch mesh in mesh file",
              mp_id);
   cmd.addInt("b", "boundary_id",
-             "ID of the boundary condition function in mesh file", bc_id);
+             "ID of the boundary condition function in mesh file", vel_bc_id);
   cmd.addInt("a", "assembly_options_id",
              "ID of the assembler options in mesh file", ass_opt_id);
 #ifdef _OPENMP
@@ -81,21 +90,22 @@ int main(int argc, char* argv[]) {
   gsFileData<> fd(fn);
   gsInfo << "Loaded file " << fd.lastPath() << std::endl;
   // retrieve multi-patch data
-  gsMultiPatch<> mp;
-  fd.getId(mp_id, mp);
-  // retrieve boundary condition data
-  gsBoundaryConditions<> bc;
-  fd.getId(bc_id, bc);
-  bc.setGeoMap(mp);
-  gsInfo << "Boundary conditions:\n" << bc << std::endl;
+  gsMultiPatch<> domain_patches;
+  fd.getId(mp_id, domain_patches);
+  // retrieve velocity boundary conditions from file
+  gsBoundaryConditions<> velocity_bcs;
+  fd.getId(vel_bc_id, velocity_bcs);
+  velocity_bcs.setGeoMap(domain_patches);
+  gsInfo << "Velocity boundary conditions:\n" << velocity_bcs << std::endl;
   // retrieve assembly options
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
 
-  gsInfo << "Geometric dimension " << mp.geoDim() << std::endl;
+  const index_t geomDim = domain_patches.geoDim();
+  gsInfo << "Geometric dimension " << geomDim << std::endl;
 
   //! [Refinement]
-  gsMultiBasis<> function_basis(mp, true);  // true: poly-splines (not NURBS)
+  gsMultiBasis<> function_basis(domain_patches, true);  // true: poly-splines (not NURBS)
 
   // h-refine each basis (for performing the analysis)
   for (int r = 0; r < numRefine; ++r) {
@@ -103,7 +113,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Output user information
-  gsInfo << "Patches: " << mp.nPatches()
+  gsInfo << "Patches: " << domain_patches.nPatches()
          << ", min-degree: " << function_basis.minCwiseDegree()
          << ", max-degree: " << function_basis.maxCwiseDegree() << std::endl;
 #ifdef _OPENMP
@@ -113,10 +123,10 @@ int main(int argc, char* argv[]) {
 #endif
 
   // iterate over all boundary segments
-  for (gsMultiPatch<>::const_biterator bit = mp.bBegin(); bit != mp.bEnd(); ++bit)
-  {
-      gsInfo << bit->patch << " " << bit->m_index << std::endl;
-  }
+  // for (gsMultiPatch<>::const_biterator bit = mp.bBegin(); bit != mp.bEnd(); ++bit)
+  // {
+  //     gsInfo << bit->patch << " " << bit->m_index << std::endl;
+  // }
 
   ///////////////////
   // Problem Setup //
@@ -124,7 +134,7 @@ int main(int argc, char* argv[]) {
 
   // Construct expression assembler 
   // (takes number of test and solution function spaces as arguments)
-  gsExprAssembler<> expr_assembler(2, 2);
+  gsExprAssembler<> expr_assembler(NUM_TEST, NUM_TRIAL);
   expr_assembler.setOptions(Aopt);
   gsInfo << "Active options:\n" << expr_assembler.options() << std::endl;
 
@@ -132,16 +142,16 @@ int main(int argc, char* argv[]) {
   expr_assembler.setIntegrationElements(function_basis);
 
   // Set the geometry map
-  geometryMap geom_expr = expr_assembler.getMap(mp);
+  geometryMap geom_expr = expr_assembler.getMap(domain_patches);
 
   // Set the discretization space
   space p_trial =
-      expr_assembler.getSpace(function_basis, pressure_field_dimension, 0);
+      expr_assembler.getSpace(function_basis, PRESSURE_DIM, PRESSURE_ID);
   gsInfo << "Solution space for pressure (id=" << p_trial.id() << ") has " 
          << p_trial.rows() << " rows and " << p_trial.cols() << " columns." 
          << std::endl;
   space u_trial =
-      expr_assembler.getSpace(function_basis, velocity_field_dimension, 1);
+      expr_assembler.getSpace(function_basis, geomDim, VELOCITY_ID);
   gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has " 
          << u_trial.rows() << " rows and " << u_trial.cols() << " columns." 
          << std::endl;
@@ -154,8 +164,10 @@ int main(int argc, char* argv[]) {
   solution velocity_solution_expression =
       expr_assembler.getSolution(u_trial, velocity_solution);
 
-  // Initialize Dirichlet bcs for velocity field
-  u_trial.setup(bc, dirichlet::l2Projection, 0);
+  // Intitalize multi-patch interfaces for pressure field
+  p_trial.setup();
+  // Initialize interfaces and Dirichlet bcs for velocity field
+  u_trial.setup(velocity_bcs, dirichlet::l2Projection);
 
   // Initialize the system
   expr_assembler.initSystem();
@@ -171,25 +183,6 @@ int main(int argc, char* argv[]) {
   //////////////
   gsInfo << "Starting assembly of linear system ..." << std::flush;
   timer.restart();
-
-  // Debug
-  gsExprEvaluator<> evaluator{expr_assembler};
-  gsMatrix<> evalPoint(2, 1);
-  evalPoint << .25, .6;
-  // Print out lambda function
-  auto print_function_expressions = [&](const std::string& name,
-                                        auto expression) {
-    gsInfo << "\nThe expression " << name << " : " << expression
-           << " evaluates at (" << evalPoint(0) << ", " << evalPoint(1)
-           << ") to \n"
-           << evaluator.eval(expression, evalPoint) << std::endl;
-    gsInfo << "It has \t" << expression.rows() << " rows and \t"
-           << expression.cols() << " cols" << std::endl;
-    gsInfo << "Is Vector : " << expression.isVector()
-           << " is Matrix : " << expression.isMatrix() << std::endl;
-    gsInfo << "The cardinality of the expression is : "
-           << expression.cardinality() << std::endl;
-  };
 
   // Compute the system matrix and right-hand side
   auto phys_jacobian = ijac(u_trial, geom_expr);
@@ -208,24 +201,21 @@ int main(int argc, char* argv[]) {
   ///////////////////
   // Linear Solver //
   ///////////////////
+
   gsInfo << "Solving the linear system of equations ..." << std::flush;
   timer.restart();
-  const auto& matrix_in_initial_configuration = expr_assembler.matrix();
+  const auto& system_matrix = expr_assembler.matrix();
   const auto& rhs_vector = expr_assembler.rhs();
 
   // Initialize linear solver
   gsSparseSolver<>::CGDiagonal solver;
-  solver.compute(matrix_in_initial_configuration);
+  solver.compute(system_matrix);
   gsMatrix<> complete_solution;
   complete_solution = solver.solve(rhs_vector);
 
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
 
-  // print the solution matrices before extraction:
-  gsInfo << "before extraction:" << std::endl;
-  gsInfo << "pressure_solution:\n" << pressure_solution << std::endl;
-  gsInfo << "velocity_solution:\n" << velocity_solution << std::endl;
   // Daniel, please ignore this
   gsInfo << "complete_solution.size() : " << complete_solution.size() << std::endl;
   gsInfo << "p_trial.mapper().freeSize() " << p_trial.mapper().freeSize() << std::endl;
@@ -253,7 +243,7 @@ int main(int argc, char* argv[]) {
                                     &expression_evaluator);
     collection.options().setSwitch("plotElements", true);
     collection.options().setInt("plotElements.resolution", sample_rate);
-    collection.newTimeStep(&mp);
+    collection.newTimeStep(&domain_patches);
     collection.addField(velocity_solution_expression, "velocity");
     collection.addField(pressure_solution_expression, "pressure");
     collection.saveTimeStep();
@@ -271,10 +261,10 @@ int main(int argc, char* argv[]) {
     gsMultiPatch<> mpsol;
     gsMatrix<> full_solution;
     gsFileData<> output;
-    output << velocity_solution;
-    velocity_solution_expression.extractFull(full_solution);
+    output << velocity_solution; // only computed quantities without fixed BCs
+    velocity_solution_expression.extractFull(full_solution); // patch-wise solution with BCs
     output << full_solution;
-    output.save("solution-field.xml");
+    output.save("velocity_field.xml");
   } else {
     gsInfo << "skipping";
   }

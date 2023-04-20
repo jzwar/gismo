@@ -106,7 +106,12 @@ int main(int argc, char* argv[]) {
 
     gsInfo << "Setting boundary conditions ..." << std::endl;
     // empty boundary condition container
-    gsBoundaryConditions<> bcInfo;
+    gsBoundaryConditions<> pressureBcInfo;
+    // no boundary conditions, but required for identifying pressure continuity 
+    // across patches
+    pressureBcInfo.setGeoMap(patches);
+    // empty boundary condition container
+    gsBoundaryConditions<> velocityBcInfo;
     // function for the no-slip boundaries 
     // (first parameter is the value, second parameter the domain dimension)
     gsConstantFunction<> g_noslip(gsVector<>(0.0,0.0), SPATIAL_DIM);
@@ -115,14 +120,16 @@ int main(int argc, char* argv[]) {
     gsConstantFunction<> g_wallslip(gsVector<>(1.0,0.0), SPATIAL_DIM);
     // gsConstantFunction<> g_wallslip(1.0, 0.0, SPATIAL_DIM);
     // assign the boundary conditions
-    bcInfo.addCondition(0, boundary::west,  condition_type::dirichlet, 
+    velocityBcInfo.addCondition(0, boundary::west,  condition_type::dirichlet, 
         &g_noslip);
-    bcInfo.addCondition(0, boundary::east,  condition_type::dirichlet, 
+    velocityBcInfo.addCondition(0, boundary::east,  condition_type::dirichlet, 
         &g_noslip);
-    bcInfo.addCondition(0, boundary::north, condition_type::dirichlet, 
+    velocityBcInfo.addCondition(0, boundary::north, condition_type::dirichlet, 
         &g_wallslip);
-    bcInfo.addCondition(0, boundary::south, condition_type::dirichlet, 
+    velocityBcInfo.addCondition(0, boundary::south, condition_type::dirichlet, 
         &g_noslip);
+    // set the geometric map for the boundary conditons
+    velocityBcInfo.setGeoMap(patches);
     gsInfo << "... Done." << std::endl;
 
     //////////////
@@ -156,8 +163,10 @@ int main(int argc, char* argv[]) {
         expr_assembler.getSpace(function_basis, PRESSURE_DIM, PRESSURE_ID);
     space u_trial =
         expr_assembler.getSpace(function_basis, VELOCITY_DIM, VELOCITY_ID);
+    // Set the boundary conditions for the pressure field
+    p_trial.setup(pressureBcInfo, dirichlet::l2Projection);
     // Set the boundary conditions for the velocity field
-    u_trial.setup(bcInfo, dirichlet::l2Projection);
+    u_trial.setup(velocityBcInfo, dirichlet::l2Projection);
     // Initialize the system
     expr_assembler.initSystem();
     setup_time += timer.stop();
