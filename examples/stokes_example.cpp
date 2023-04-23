@@ -165,9 +165,9 @@ int main(int argc, char* argv[]) {
       expr_assembler.getSolution(u_trial, velocity_solution);
 
   // Intitalize multi-patch interfaces for pressure field
-  p_trial.setup();
+  p_trial.setup(0);
   // Initialize interfaces and Dirichlet bcs for velocity field
-  u_trial.setup(velocity_bcs, dirichlet::l2Projection);
+  u_trial.setup(velocity_bcs, dirichlet::l2Projection, 0);
 
   // Initialize the system
   expr_assembler.initSystem();
@@ -218,6 +218,7 @@ int main(int argc, char* argv[]) {
 
   // Daniel, please ignore this
   gsInfo << "complete_solution.size() : " << complete_solution.size() << std::endl;
+  gsInfo << "complete_solution:" << complete_solution << std::endl;
   gsInfo << "p_trial.mapper().freeSize() " << p_trial.mapper().freeSize() << std::endl;
   gsInfo << "u_trial.mapper().freeSize() " << u_trial.mapper().freeSize() << std::endl;
   pressure_solution =
