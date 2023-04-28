@@ -101,6 +101,11 @@ int main(int argc, char* argv[]) {
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
 
+  // test boundary conditions
+  for(typename gsBoundaryConditions<>::const_iterator cit = velocity_bcs.dirichletBegin(); cit!= velocity_bcs.dirichletEnd(); cit++) {
+    gsInfo << cit->patch() <<  " " << cit->side() << " " << cit->unknown() << " " << cit->unkComponent() << " " << *(cit->function()) << std::endl;
+  }
+
   const index_t geomDim = domain_patches.geoDim();
   gsInfo << "Geometric dimension " << geomDim << std::endl;
 
@@ -235,6 +240,10 @@ int main(int argc, char* argv[]) {
   // Export and Visualization //
   //////////////////////////////
   gsExprEvaluator<> expression_evaluator(expr_assembler);
+
+  // this export also works in case of refinement while the one below doesn't
+  expression_evaluator.writeParaview(velocity_solution_expression, geom_expr, "velocity");
+  expression_evaluator.writeParaview(pressure_solution_expression, geom_expr, "pressure");
 
   // Generate Paraview File
   gsInfo << "Starting the paraview export ..." << std::flush;

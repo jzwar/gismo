@@ -1,92 +1,52 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <xml>
-
-  <!-- Computational domain -->
-  <MultiPatch id="0" parDim="2">
-    <patches type="id_range">500 501</patches>
-    <interfaces>501 1 500 2 0 1 1 1
-    </interfaces>
-    <boundary name="dirichlet">
-      501 4
-      500 3
-      501 3
-      500 4
-      500 1
-      501 2
-    </boundary>
+  <MultiPatch parDim="2" id="0">
+    <patches type="id_range">100 100</patches>
+    <interfaces />
+    <boundary name="BID1">100 1</boundary>
+    <boundary name="BID2">100 2</boundary>
+    <boundary name="BID3">100 3</boundary>
+    <boundary name="BID4">100 4</boundary>
   </MultiPatch>
-
-  <!-- The boundary conditions (multipatch=number of patches)-->
-  <boundaryConditions id="1" multipatch="0">
-    <!-- Functions that are used to define the boundary conditions -->
-    <Function type="FunctionExpr" dim="2" index="0" c="2">
-      <c index="0">x</c>
-      <c index="0">y</c>
-    </Function>
-    <!-- Assignment of boundaries, function expressions, and unknowns -->
-    <bc type="Dirichlet" function="0" unknown="1" name="dirichlet"> 
-    0 1 0 3 0 4 1 2 1 3 1 4
-    </bc>
+  <Geometry type="TensorBSpline2" id="100">
+    <Basis type="TensorBSplineBasis2">
+      <Basis type="BSplineBasis" index="0">
+        <KnotVector degree="2">0.0 0.0 0.0 1.0 1.0 1.0</KnotVector>
+      </Basis>
+      <Basis type="BSplineBasis" index="1">
+        <KnotVector degree="2">0.0 0.0 0.0 1.0 1.0 1.0</KnotVector>
+      </Basis>
+    </Basis>
+    <coefs geoDim="2">0.0 0.0
+1.5 0.0
+3.0 0.0
+0.0 2.0
+1.5 2.0
+3.0 2.0
+0.0 4.0
+1.5 4.0
+3.0 4.0</coefs>
+  </Geometry>
+  <OptionList id="10">
+    <int label="DirichletStrategy" desc="Method for enforcement of Dirichlet BCs [11..14]" value="11" />
+    <int label="DirichletValues" desc="Method for computation of Dirichlet DoF values [100..103]" value="101" />
+    <int label="InterfaceStrategy" desc="Method of treatment of patch interfaces [0..3]" value="1" />
+    <real label="bdA" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="2" />
+    <int label="bdB" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="1" />
+    <real label="bdO" desc="Overhead of sparse mem. allocation: (1+bdO)(bdA*deg + bdB) [0..1]" value="0.333" />
+    <real label="quA" desc="Number of quadrature points: quA*deg + quB" value="1" />
+    <int label="quB" desc="Number of quadrature points: quA*deg + quB" value="1" />
+    <int label="quRule" desc="Quadrature rule [1:GaussLegendre,2:GaussLobatto]" value="1" />
+  </OptionList>
+  <boundaryConditions multipatch="0" id="1">
+    <Function type="FunctionExpr" dim="2" index="0">0</Function>
+    <Function type="FunctionExpr" dim="2" index="1">4</Function>
+    <Function type="FunctionExpr" dim="2" index="2">y</Function>
+    <bc type="Dirichlet" function="2" unknown="1" component="0" noname="BID1">0 1</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID1">0 1</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID2">0 2</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID3">0 3</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID3">0 3</bc>
+    <bc type="Dirichlet" function="1" unknown="1" component="0" noname="BID4">0 4</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID4">0 4</bc>
   </boundaryConditions>
-
-  <!-- Assembler options -->
- <OptionList id="2">
-  <int label="DirichletStrategy" desc="Method for enforcement of Dirichlet BCs [11..14]" value="11"/>
-  <int label="DirichletValues" desc="Method for computation of Dirichlet DoF values [100..103]" value="101"/>
-  <int label="InterfaceStrategy" desc="Method of treatment of patch interfaces [0..3]" value="1"/>
-  <real label="bdA" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="2"/>
-  <int label="bdB" desc="Estimated nonzeros per column of the matrix: bdA*deg + bdB" value="1"/>
-  <real label="bdO" desc="Overhead of sparse mem. allocation: (1+bdO)(bdA*deg + bdB) [0..1]" value="0.333"/>
-  <real label="quA" desc="Number of quadrature points: quA*deg + quB" value="1"/>
-  <int  label="quB" desc="Number of quadrature points: quA*deg + quB" value="1"/>
-  <int label="quRule" desc="Quadrature rule [1:GaussLegendre,2:GaussLobatto]" value="1"/>
- </OptionList>
-
-
-  <!-- other options -->
-
-  <!-- Spline data -->
-  <Geometry type="TensorNurbs2" id="500">
-  <Basis type="TensorNurbsBasis2">
-   <Basis type="TensorBSplineBasis2" parDim="2">
-    <Basis type="BSplineBasis" index="0">
-     <KnotVector degree="1">0.00000   0.00000   1.00000   1.00000</KnotVector>
-    </Basis>
-    <Basis type="BSplineBasis" index="1">
-     <KnotVector degree="2">0.00000   0.00000   0.00000   1.00000   1.00000   1.00000</KnotVector>
-    </Basis>
-   </Basis>
-   <weights>1 1 0.707106781186548 0.707106781186548 1 1 </weights>
-  </Basis>
-  <coefs geoDim="2">
-    1 0
-    2 0
-    1 1
-    2 2
-    0 1
-    0 2
-    </coefs>
- </Geometry>
- <Geometry type="TensorNurbs2" id="501">
-  <Basis type="TensorNurbsBasis2">
-   <Basis type="TensorBSplineBasis2" parDim="2">
-    <Basis type="BSplineBasis" index="0">
-     <KnotVector degree="1">0.00000   0.00000   1.00000   1.00000</KnotVector>
-    </Basis>
-    <Basis type="BSplineBasis" index="1">
-     <KnotVector degree="2">0.00000   0.00000   0.00000   1.00000   1.00000   1.00000</KnotVector>
-    </Basis>
-   </Basis>
-  <weights>1 1 0.707106781186548 0.707106781186548 1 1 </weights>
-  </Basis>
-  <coefs geoDim="2">
-    2 0
-    3 0
-    2 2
-    3 3
-    0 2
-    0 3
-    </coefs>
- </Geometry>
-
 </xml>
