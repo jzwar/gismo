@@ -193,10 +193,10 @@ int main(int argc, char* argv[]) {
   auto phys_jacobian = ijac(u_trial, geom_expr);
   auto bilin_conti = p_trial * idiv(u_trial, geom_expr).tr() * meas(geom_expr);
   auto bilin_press = idiv(u_trial, geom_expr) * p_trial.tr() * meas(geom_expr);
-  auto bilin_mu_1 = viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
-                    meas(geom_expr);
+  auto bilin_mu_1 = 
+    viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) * meas(geom_expr);
   auto bilin_mu_2 =
-      viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
+    viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
 
   expr_assembler.assemble(bilin_conti, bilin_press, bilin_mu_1, bilin_mu_2);
 
@@ -212,27 +212,27 @@ int main(int argc, char* argv[]) {
   const auto& system_matrix = expr_assembler.matrix();
   const auto& rhs_vector = expr_assembler.rhs();
 
-  gsDebugVar(rhs_vector.transpose());
-
   // Initialize linear solver
-  gsSparseSolver<>::CGDiagonal solver;
+  // gsSparseSolver<>::CGDiagonal solver;
+  gsSparseSolver<>::BiCGSTABILUT solver;
+  // gsSparseSolver<>::BiCGSTABDiagonal solver;
   solver.compute(system_matrix);
-  gsMatrix<> complete_solution;
-  complete_solution = solver.solve(rhs_vector);
+  gsMatrix<> complete_solution = solver.solve(rhs_vector);
 
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
 
-  // Daniel, please ignore this
-  gsDebugVar(complete_solution.size());
-  gsDebugVar(complete_solution);
-  gsDebugVar(p_trial.mapper().freeSize());
-  gsDebugVar(u_trial.mapper().freeSize());
   pressure_solution = complete_solution.block(0, 0, 
                                               p_trial.mapper().freeSize(), 1);
   velocity_solution = complete_solution.block(p_trial.mapper().freeSize(), 0,
                                               u_trial.mapper().freeSize(), 1);
-  // print the solution matrices after extraction:
+  
+  // some debug messages
+  gsDebugVar(rhs_vector);
+  gsDebugVar(complete_solution.size());
+  gsDebugVar(complete_solution);
+  gsDebugVar(p_trial.mapper().freeSize());
+  gsDebugVar(u_trial.mapper().freeSize());
   gsDebugVar(pressure_solution);
   gsDebugVar(velocity_solution);
 

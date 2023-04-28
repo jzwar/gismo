@@ -17,14 +17,14 @@
       </Basis>
     </Basis>
     <coefs geoDim="2">0.0 0.0
-1.5 0.0
-3.0 0.0
-0.0 2.0
-1.5 2.0
-3.0 2.0
-0.0 4.0
-1.5 4.0
-3.0 4.0</coefs>
+0.5 0.0
+1.0 0.0
+0.0 0.5
+0.5 0.5
+1.0 0.5
+0.0 1.0
+0.5 1.0
+1.0 1.0</coefs>
   </Geometry>
   <OptionList id="10">
     <int label="DirichletStrategy" desc="Method for enforcement of Dirichlet BCs [11..14]" value="11" />
@@ -39,10 +39,10 @@
   </OptionList>
   <boundaryConditions multipatch="0" id="1">
     <Function type="FunctionExpr" dim="2" index="0">0</Function>
-    <Function type="FunctionExpr" dim="2" index="1">4</Function>
-    <Function type="FunctionExpr" dim="2" index="2">y</Function>
-    <bc type="Dirichlet" function="2" unknown="1" component="0" noname="BID1">0 1</bc>
+    <Function type="FunctionExpr" dim="2" index="1">1</Function>
+    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID1">0 1</bc>
     <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID1">0 1</bc>
+    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID2">0 2</bc>
     <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID2">0 2</bc>
     <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID3">0 3</bc>
     <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID3">0 3</bc>

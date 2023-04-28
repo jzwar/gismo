@@ -213,7 +213,7 @@ gismo_options.append(assembly_options)
 gismo_options.append(boundary_conditions)
 
 # Define geometry
-rectangle = gus.spline.create.box(3,4).bspline
+rectangle = gus.spline.create.box(1,1).bspline
 rectangle.elevate_degrees([0,1])
 
 # refine and extract mp
