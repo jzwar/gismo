@@ -212,6 +212,8 @@ int main(int argc, char* argv[]) {
   const auto& system_matrix = expr_assembler.matrix();
   const auto& rhs_vector = expr_assembler.rhs();
 
+  gsDebugVar(rhs_vector.transpose());
+
   // Initialize linear solver
   gsSparseSolver<>::CGDiagonal solver;
   solver.compute(system_matrix);
@@ -222,18 +224,17 @@ int main(int argc, char* argv[]) {
   gsInfo << "\tFinished" << std::endl;
 
   // Daniel, please ignore this
-  gsInfo << "complete_solution.size() : " << complete_solution.size() << std::endl;
-  gsInfo << "complete_solution:" << complete_solution << std::endl;
-  gsInfo << "p_trial.mapper().freeSize() " << p_trial.mapper().freeSize() << std::endl;
-  gsInfo << "u_trial.mapper().freeSize() " << u_trial.mapper().freeSize() << std::endl;
-  pressure_solution =
-      complete_solution.block(0, 0, p_trial.mapper().freeSize(), 1);
+  gsDebugVar(complete_solution.size());
+  gsDebugVar(complete_solution);
+  gsDebugVar(p_trial.mapper().freeSize());
+  gsDebugVar(u_trial.mapper().freeSize());
+  pressure_solution = complete_solution.block(0, 0, 
+                                              p_trial.mapper().freeSize(), 1);
   velocity_solution = complete_solution.block(p_trial.mapper().freeSize(), 0,
                                               u_trial.mapper().freeSize(), 1);
   // print the solution matrices after extraction:
-  gsInfo << "after extraction:" << std::endl;
-  gsInfo << "pressure_solution:\n" << pressure_solution << std::endl;
-  gsInfo << "velocity_solution:\n" << velocity_solution << std::endl;
+  gsDebugVar(pressure_solution);
+  gsDebugVar(velocity_solution);
 
 
   //////////////////////////////
