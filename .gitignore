@@ -34,6 +34,11 @@ CMakeFiles/
 *.vtp
 *.pvd
 
+# Build folders and test-folders
+**/playground
+**/build
+**/release
+**/debug
 
 #Mac OS
 **/.DS_Store
