@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
   bool export_xml = false;
   cmd.addSwitch("export-xml", "Export solution into g+smo xml format.",
                 export_xml);
-  int sample_rate{4};
+  index_t sample_rate{4};
   cmd.addInt("q", "sample-rate", "Sample rate of splines for export",
              sample_rate);
 
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
   cmd.addInt("r", "uniformRefine", "Number of uniform h-refinement loops",
              numRefine);
 
-  std::string fn("../../filedata/pde/stokes2d_bvp.xml");
+  std::string fn("../../filedata/pde/stokes2d_cavity.xml");
   cmd.addString("f", "file", "Input XML file", fn);
 
   // A few more mesh options
@@ -139,11 +139,11 @@ int main(int argc, char* argv[]) {
 
   // Output user information
   gsInfo << "Summary Velocity :\nPatches: " << domain_patches.nPatches()
-         << "\nMin-degree : " << function_basis_velocity.minCwiseDegree()
+         << "\nMin-degree: " << function_basis_velocity.minCwiseDegree()
          << "\nMax-degree: " << function_basis_velocity.maxCwiseDegree() << "\n"
          << std::endl;
   gsInfo << "Summary Pressure :\nPatches: " << domain_patches.nPatches()
-         << "\nMin-degree : " << function_basis_pressure.minCwiseDegree()
+         << "\nMin-degree: " << function_basis_pressure.minCwiseDegree()
          << "\nMax-degree: " << function_basis_pressure.maxCwiseDegree() << "\n"
          << std::endl;
 #ifdef _OPENMP
@@ -166,32 +166,34 @@ int main(int argc, char* argv[]) {
   expr_assembler.setIntegrationElements(function_basis_velocity);
 
   // Set the geometry map
-  geometryMap geom_expr = expr_assembler.getMap(domain_patches);
+  geometryMap geoMap = expr_assembler.getMap(domain_patches);
 
-  // Set the discretization space
-  space p_trial = expr_assembler.getSpace(function_basis_pressure, PRESSURE_DIM,
-                                          PRESSURE_ID);
-  gsInfo << "Solution space for pressure (id=" << p_trial.id() << ") has "
-         << p_trial.rows() << " rows and " << p_trial.cols() << " columns."
-         << std::endl;
-  space u_trial =
-      expr_assembler.getSpace(function_basis_velocity, geomDim, VELOCITY_ID);
-  gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has "
-         << u_trial.rows() << " rows and " << u_trial.cols() << " columns."
-         << std::endl;
+  // Set the discretization spaces
+  space pressure_trial_space = expr_assembler.getSpace(
+    function_basis_pressure, PRESSURE_DIM, PRESSURE_ID
+  );
+  gsInfo << "Solution space for pressure (id=" << pressure_trial_space.id() 
+         << ") has " << pressure_trial_space.rows() << " rows and " 
+         << pressure_trial_space.cols() << " columns." << std::endl;
+  space velocity_trial_space = expr_assembler.getSpace(
+    function_basis_velocity, geomDim, VELOCITY_ID
+  );
+  gsInfo << "Solution space for velocity (id=" << velocity_trial_space.id() 
+         << ") has " << velocity_trial_space.rows() << " rows and " 
+         << velocity_trial_space.cols() << " columns." << std::endl;
 
   // Solution vector and solution variable
-  gsMatrix<> pressure_solution;
-  solution pressure_solution_expression =
-      expr_assembler.getSolution(p_trial, pressure_solution);
-  gsMatrix<> velocity_solution;
-  solution velocity_solution_expression =
-      expr_assembler.getSolution(u_trial, velocity_solution);
+  gsMatrix<> pressure_coefficients;
+  solution pressure_field = 
+      expr_assembler.getSolution(pressure_trial_space, pressure_coefficients);
+  gsMatrix<> velocity_coefficients;
+  solution velocity_field =
+      expr_assembler.getSolution(velocity_trial_space, velocity_coefficients);
 
   // Intitalize multi-patch interfaces for pressure field
-  p_trial.setup(0);
+  pressure_trial_space.setup(0);
   // Initialize interfaces and Dirichlet bcs for velocity field
-  u_trial.setup(velocity_bcs, Aopt.getInt("DirichletValues"), 0);
+  velocity_trial_space.setup(velocity_bcs, Aopt.getInt("DirichletValues"), 0);
 
   // Initialize the system
   expr_assembler.initSystem();
@@ -209,13 +211,13 @@ int main(int argc, char* argv[]) {
   timer.restart();
 
   // Compute the system matrix and right-hand side
-  auto phys_jacobian = ijac(u_trial, geom_expr);
-  auto bilin_conti = p_trial * idiv(u_trial, geom_expr).tr() * meas(geom_expr);
-  auto bilin_press = idiv(u_trial, geom_expr) * p_trial.tr() * meas(geom_expr);
+  auto phys_jacobian = ijac(velocity_trial_space, geoMap);
+  auto bilin_conti = pressure_trial_space * idiv(velocity_trial_space, geoMap).tr() * meas(geoMap);
+  auto bilin_press = idiv(velocity_trial_space, geoMap) * pressure_trial_space.tr() * meas(geoMap);
   auto bilin_mu_1 = viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
-                    meas(geom_expr);
+                    meas(geoMap);
   auto bilin_mu_2 =
-      viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
+      viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geoMap);
 
   expr_assembler.assemble(bilin_conti, bilin_press, bilin_mu_1, bilin_mu_2);
 
@@ -241,22 +243,35 @@ int main(int argc, char* argv[]) {
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
 
-  pressure_solution = complete_solution;
-  velocity_solution = complete_solution;
+  pressure_coefficients = complete_solution;
+  velocity_coefficients = complete_solution;
+
+  ////////////////////
+  // Postprocessing //
+  ////////////////////
+  gsExprEvaluator<> expression_evaluator(expr_assembler);
+
+  // Evaluate objective function
+  real_t objective = expression_evaluator.integral(
+    -2.0 * viscosity * (
+        (igrad(velocity_field,geoMap) + igrad(velocity_field,geoMap).tr()) 
+      % (igrad(velocity_field,geoMap) + igrad(velocity_field,geoMap).tr())
+    ) * meas(geoMap)
+  );
+  gsInfo << "\nObjective function value is: " << objective << std::endl;
 
   //////////////////////////////
   // Export and Visualization //
   //////////////////////////////
-  gsExprEvaluator<> expression_evaluator(expr_assembler);
 
   // // Old-school export
-  // expression_evaluator.writeParaview(velocity_solution_expression, geom_expr,
+  // expression_evaluator.writeParaview(velocity_field, geom_expr,
   //                                    "velocity");
-  // expression_evaluator.writeParaview(pressure_solution_expression, geom_expr,
+  // expression_evaluator.writeParaview(pressure_field, geom_expr,
   //                                    "pressure");
 
   // Generate Paraview File
-  gsInfo << "Starting the paraview export ..." << std::flush;
+  gsInfo << "\nStarting the paraview export ..." << std::flush;
   timer.restart();
   if (plot) {
     gsParaviewCollection collection("ParaviewOutput/solution",
@@ -264,8 +279,8 @@ int main(int argc, char* argv[]) {
     collection.options().setSwitch("plotElements", true);
     collection.options().setInt("plotElements.resolution", sample_rate);
     collection.newTimeStep(&domain_patches);
-    collection.addField(velocity_solution_expression, "velocity");
-    collection.addField(pressure_solution_expression, "pressure");
+    collection.addField(velocity_field, "velocity");
+    collection.addField(pressure_field, "pressure");
     collection.saveTimeStep();
     collection.save();
 
@@ -279,16 +294,16 @@ int main(int argc, char* argv[]) {
   if (export_xml) {
     gsMatrix<> full_solution_velocity;
     gsFileData<> output;
-    output << velocity_solution;  // only computed quantities without fixed BCs
-    velocity_solution_expression.extractFull(
+    output << velocity_coefficients;  // only computed quantities without fixed BCs
+    velocity_field.extractFull(
         full_solution_velocity);  // patch-wise solution with BCs
     output << full_solution_velocity;
     output.save("velocity_field.xml");
     gsMatrix<> full_solution_pressure;
     gsFileData<> output_pressure;
     output_pressure
-        << pressure_solution;  // only computed quantities without fixed BCs
-    pressure_solution_expression.extractFull(
+        << pressure_coefficients;  // only computed quantities without fixed BCs
+    pressure_field.extractFull(
         full_solution_pressure);  // patch-wise solution with BCs
     output_pressure << full_solution_pressure;
     output_pressure.save("pressure_field.xml");

@@ -47,7 +47,7 @@
     <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID2" />
     <bc type="Dirichlet" function="0" unknown="1" component="0" name="BID3" />
     <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID3" />
-    <bc type="Dirichlet" function="2" unknown="1" component="0" name="BID4" />
+    <bc type="Dirichlet" function="1" unknown="1" component="0" name="BID4" />
     <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID4" />
   </boundaryConditions>
 </xml>
