@@ -6,7 +6,9 @@ submodules.txt
 
 # Binary directories
 cmake-build-*/
-build/
+**/build/
+**/release/
+**/debug/
 
 # Files with ending ~ (backup files from some editors)
 **/*~
@@ -33,7 +35,6 @@ CMakeFiles/
 # paraview result files
 *.vtp
 *.pvd
-
 
 #Mac OS
 **/.DS_Store
