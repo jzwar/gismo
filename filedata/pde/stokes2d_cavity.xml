@@ -40,13 +40,14 @@
   <boundaryConditions multipatch="0" id="1">
     <Function type="FunctionExpr" dim="2" index="0">0</Function>
     <Function type="FunctionExpr" dim="2" index="1">1</Function>
-    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID1">0 1</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID1">0 1</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID2">0 2</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID2">0 2</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="0" noname="BID3">0 3</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID3">0 3</bc>
-    <bc type="Dirichlet" function="1" unknown="1" component="0" noname="BID4">0 4</bc>
-    <bc type="Dirichlet" function="0" unknown="1" component="1" noname="BID4">0 4</bc>
+    <Function type="FunctionExpr" dim="2" index="2">4*x*(1-x)</Function>
+    <bc type="Dirichlet" function="0" unknown="1" component="0" name="BID1" />
+    <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID1" />
+    <bc type="Dirichlet" function="0" unknown="1" component="0" name="BID2" />
+    <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID2" />
+    <bc type="Dirichlet" function="0" unknown="1" component="0" name="BID3" />
+    <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID3" />
+    <bc type="Dirichlet" function="2" unknown="1" component="0" name="BID4" />
+    <bc type="Dirichlet" function="0" unknown="1" component="1" name="BID4" />
   </boundaryConditions>
 </xml>

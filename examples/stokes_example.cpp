@@ -15,7 +15,6 @@ typedef gsExprAssembler<>::space space;
 typedef gsExprAssembler<>::solution solution;
 
 int main(int argc, char* argv[]) {
-
   ////////////////////
   // Global Options //
   ////////////////////
@@ -31,8 +30,7 @@ int main(int argc, char* argv[]) {
 
   // Setup values for timing
   double setup_time(0), assembly_time_ls(0), solving_time_ls(0),
-      assembly_time_adj_ls(0), solving_time_adj_ls(0),
-      objective_function_time(0), plotting_time(0);
+      plotting_time(0);
   gsStopwatch timer;
   timer.restart();
 
@@ -59,6 +57,9 @@ int main(int argc, char* argv[]) {
   cmd.addReal("v", "visc", "Viscosity", viscosity);
 
   // Mesh options
+  index_t degreeElevate = 0;
+  cmd.addInt("e", "degreeElevate", "Number of uniform degree elevations",
+             degreeElevate);
   index_t numRefine = 0;
   cmd.addInt("r", "uniformRefine", "Number of uniform h-refinement loops",
              numRefine);
@@ -101,64 +102,82 @@ int main(int argc, char* argv[]) {
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
 
-  // test boundary conditions
-  for(typename gsBoundaryConditions<>::const_iterator cit = velocity_bcs.dirichletBegin(); cit!= velocity_bcs.dirichletEnd(); cit++) {
-    gsInfo << cit->patch() <<  " " << cit->side() << " " << cit->unknown() << " " << cit->unkComponent() << " " << *(cit->function()) << std::endl;
-  }
+  // Debugging boundary conditions
+  // for (typename gsBoundaryConditions<>::const_iterator cit =
+  //          velocity_bcs.dirichletBegin();
+  //      cit != velocity_bcs.dirichletEnd(); cit++) {
+  //   gsInfo << cit->patch() << " " << cit->side() << " " << cit->unknown() <<
+  //   " "
+  //          << cit->unkComponent() << " " << *(cit->function()) << std::endl;
+  // }
 
   const index_t geomDim = domain_patches.geoDim();
   gsInfo << "Geometric dimension " << geomDim << std::endl;
 
   //! [Refinement]
-  gsMultiBasis<> function_basis(domain_patches, true);  // true: poly-splines (not NURBS)
+  gsMultiBasis<> function_basis_velocity(
+      domain_patches,
+      true);  // true: poly-splines (not NURBS)
+  gsMultiBasis<> function_basis_pressure(
+      domain_patches,
+      true);  // true: poly-splines (not NURBS)
+
+  // Degree elevation
+  for (int e = 0; e < degreeElevate; e++) {
+    function_basis_velocity.degreeElevate();
+    function_basis_pressure.degreeElevate();
+  }
+
+  // Taylor-Hood-ing that B****
+  function_basis_velocity.degreeElevate();
 
   // h-refine each basis (for performing the analysis)
   for (int r = 0; r < numRefine; ++r) {
-    function_basis.uniformRefine();
+    function_basis_velocity.uniformRefine();
+    function_basis_pressure.uniformRefine();
   }
 
   // Output user information
-  gsInfo << "Patches: " << domain_patches.nPatches()
-         << ", min-degree: " << function_basis.minCwiseDegree()
-         << ", max-degree: " << function_basis.maxCwiseDegree() << std::endl;
+  gsInfo << "Summary Velocity :\nPatches: " << domain_patches.nPatches()
+         << "\nMin-degree : " << function_basis_velocity.minCwiseDegree()
+         << "\nMax-degree: " << function_basis_velocity.maxCwiseDegree() << "\n"
+         << std::endl;
+  gsInfo << "Summary Pressure :\nPatches: " << domain_patches.nPatches()
+         << "\nMin-degree : " << function_basis_pressure.minCwiseDegree()
+         << "\nMax-degree: " << function_basis_pressure.maxCwiseDegree() << "\n"
+         << std::endl;
 #ifdef _OPENMP
   gsInfo << "Available threads: " << omp_get_max_threads() << std::endl;
   omp_set_num_threads(std::min(omp_get_max_threads(), n_omp_threads));
   gsInfo << "Number of threads: " << omp_get_num_threads() << std::endl;
 #endif
 
-  // iterate over all boundary segments
-  // for (gsMultiPatch<>::const_biterator bit = mp.bBegin(); bit != mp.bEnd(); ++bit)
-  // {
-  //     gsInfo << bit->patch << " " << bit->m_index << std::endl;
-  // }
-
   ///////////////////
   // Problem Setup //
   ///////////////////
 
-  // Construct expression assembler 
+  // Construct expression assembler
   // (takes number of test and solution function spaces as arguments)
   gsExprAssembler<> expr_assembler(NUM_TEST, NUM_TRIAL);
   expr_assembler.setOptions(Aopt);
   gsInfo << "Active options:\n" << expr_assembler.options() << std::endl;
 
   // Elements used for numerical integration
-  expr_assembler.setIntegrationElements(function_basis);
+  expr_assembler.setIntegrationElements(function_basis_velocity);
 
   // Set the geometry map
   geometryMap geom_expr = expr_assembler.getMap(domain_patches);
 
   // Set the discretization space
-  space p_trial =
-      expr_assembler.getSpace(function_basis, PRESSURE_DIM, PRESSURE_ID);
-  gsInfo << "Solution space for pressure (id=" << p_trial.id() << ") has " 
-         << p_trial.rows() << " rows and " << p_trial.cols() << " columns." 
+  space p_trial = expr_assembler.getSpace(function_basis_pressure, PRESSURE_DIM,
+                                          PRESSURE_ID);
+  gsInfo << "Solution space for pressure (id=" << p_trial.id() << ") has "
+         << p_trial.rows() << " rows and " << p_trial.cols() << " columns."
          << std::endl;
   space u_trial =
-      expr_assembler.getSpace(function_basis, geomDim, VELOCITY_ID);
-  gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has " 
-         << u_trial.rows() << " rows and " << u_trial.cols() << " columns." 
+      expr_assembler.getSpace(function_basis_velocity, geomDim, VELOCITY_ID);
+  gsInfo << "Solution space for velocity (id=" << u_trial.id() << ") has "
+         << u_trial.rows() << " rows and " << u_trial.cols() << " columns."
          << std::endl;
 
   // Solution vector and solution variable
@@ -180,7 +199,7 @@ int main(int argc, char* argv[]) {
 
   gsInfo << "Number of degrees of freedom : " << expr_assembler.numDofs()
          << std::endl;
-  gsInfo << "Number of blocks in the system matrix : " 
+  gsInfo << "Number of blocks in the system matrix : "
          << expr_assembler.numBlocks() << std::endl;
 
   //////////////
@@ -193,10 +212,10 @@ int main(int argc, char* argv[]) {
   auto phys_jacobian = ijac(u_trial, geom_expr);
   auto bilin_conti = p_trial * idiv(u_trial, geom_expr).tr() * meas(geom_expr);
   auto bilin_press = idiv(u_trial, geom_expr) * p_trial.tr() * meas(geom_expr);
-  auto bilin_mu_1 = 
-    viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) * meas(geom_expr);
+  auto bilin_mu_1 = viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
+                    meas(geom_expr);
   auto bilin_mu_2 =
-    viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
+      viscosity * (phys_jacobian % phys_jacobian.tr()) * meas(geom_expr);
 
   expr_assembler.assemble(bilin_conti, bilin_press, bilin_mu_1, bilin_mu_2);
 
@@ -214,37 +233,27 @@ int main(int argc, char* argv[]) {
 
   // Initialize linear solver
   // gsSparseSolver<>::CGDiagonal solver;
-  gsSparseSolver<>::BiCGSTABILUT solver;
-  // gsSparseSolver<>::BiCGSTABDiagonal solver;
+  // gsSparseSolver<>::BiCGSTABILUT solver;
+  gsSparseSolver<>::BiCGSTABDiagonal solver;
   solver.compute(system_matrix);
   gsMatrix<> complete_solution = solver.solve(rhs_vector);
 
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
 
-  pressure_solution = complete_solution.block(0, 0, 
-                                              p_trial.mapper().freeSize(), 1);
-  velocity_solution = complete_solution.block(p_trial.mapper().freeSize(), 0,
-                                              u_trial.mapper().freeSize(), 1);
-  
-  // some debug messages
-  gsDebugVar(rhs_vector);
-  gsDebugVar(complete_solution.size());
-  gsDebugVar(complete_solution);
-  gsDebugVar(p_trial.mapper().freeSize());
-  gsDebugVar(u_trial.mapper().freeSize());
-  gsDebugVar(pressure_solution);
-  gsDebugVar(velocity_solution);
-
+  pressure_solution = complete_solution;
+  velocity_solution = complete_solution;
 
   //////////////////////////////
   // Export and Visualization //
   //////////////////////////////
   gsExprEvaluator<> expression_evaluator(expr_assembler);
 
-  // this export also works in case of refinement while the one below doesn't
-  expression_evaluator.writeParaview(velocity_solution_expression, geom_expr, "velocity");
-  expression_evaluator.writeParaview(pressure_solution_expression, geom_expr, "pressure");
+  // // Old-school export
+  // expression_evaluator.writeParaview(velocity_solution_expression, geom_expr,
+  //                                    "velocity");
+  // expression_evaluator.writeParaview(pressure_solution_expression, geom_expr,
+  //                                    "pressure");
 
   // Generate Paraview File
   gsInfo << "Starting the paraview export ..." << std::flush;
@@ -264,18 +273,25 @@ int main(int argc, char* argv[]) {
     gsInfo << "skipping";
   }
   gsInfo << "\tFinished" << std::endl;
-  //! [Export visualization in ParaView]
 
   // Export solution file as xml
   gsInfo << "Starting the xml export ..." << std::flush;
   if (export_xml) {
-    gsMultiPatch<> mpsol;
-    gsMatrix<> full_solution;
+    gsMatrix<> full_solution_velocity;
     gsFileData<> output;
-    output << velocity_solution; // only computed quantities without fixed BCs
-    velocity_solution_expression.extractFull(full_solution); // patch-wise solution with BCs
-    output << full_solution;
+    output << velocity_solution;  // only computed quantities without fixed BCs
+    velocity_solution_expression.extractFull(
+        full_solution_velocity);  // patch-wise solution with BCs
+    output << full_solution_velocity;
     output.save("velocity_field.xml");
+    gsMatrix<> full_solution_pressure;
+    gsFileData<> output_pressure;
+    output_pressure
+        << pressure_solution;  // only computed quantities without fixed BCs
+    pressure_solution_expression.extractFull(
+        full_solution_pressure);  // patch-wise solution with BCs
+    output_pressure << full_solution_pressure;
+    output_pressure.save("pressure_field.xml");
   } else {
     gsInfo << "skipping";
   }
@@ -284,9 +300,7 @@ int main(int argc, char* argv[]) {
 
   // User output infor timings
   gsInfo << "\n\nTotal time: "
-         << setup_time + assembly_time_ls + solving_time_ls +
-                assembly_time_adj_ls + solving_time_adj_ls +
-                objective_function_time + plotting_time
+         << setup_time + assembly_time_ls + solving_time_ls + plotting_time
          << std::endl;
   gsInfo << "                       Setup: " << setup_time << std::endl;
   gsInfo << "      Assembly Linear System: " << assembly_time_ls << std::endl;
