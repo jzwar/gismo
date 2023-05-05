@@ -191,7 +191,7 @@ int main(int argc, char* argv[]) {
   // Intitalize multi-patch interfaces for pressure field
   p_trial.setup(0);
   // Initialize interfaces and Dirichlet bcs for velocity field
-  u_trial.setup(velocity_bcs, dirichlet::l2Projection, 0);
+  u_trial.setup(velocity_bcs, Aopt.getInt("DirichletValues"), 0);
 
   // Initialize the system
   expr_assembler.initSystem();
