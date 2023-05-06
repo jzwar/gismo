@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
   // Compute the system matrix and right-hand side
   auto phys_jacobian = ijac(velocity_trial_space, geoMap);
   auto bilin_conti = pressure_trial_space * idiv(velocity_trial_space, geoMap).tr() * meas(geoMap);
-  auto bilin_press = idiv(velocity_trial_space, geoMap) * pressure_trial_space.tr() * meas(geoMap);
+  auto bilin_press = -idiv(velocity_trial_space, geoMap) * pressure_trial_space.tr() * meas(geoMap);
   auto bilin_mu_1 = viscosity * (phys_jacobian.cwisetr() % phys_jacobian.tr()) *
                     meas(geoMap);
   auto bilin_mu_2 =
