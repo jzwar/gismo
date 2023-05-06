@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         &g_zero_vel, VELOCITY_ID, false, 1);
     velocityBCs.addCondition(0, boundary::south, condition_type::dirichlet, 
         &g_zero_vel, VELOCITY_ID, false, 0);
-    velocityBCs.addCondition(0, boundary::south,  condition_type::dirichlet, 
+    velocityBCs.addCondition(0, boundary::south, condition_type::dirichlet, 
         &g_zero_vel, VELOCITY_ID, false, 1);
     velocityBCs.addCondition(0, boundary::north, condition_type::dirichlet, 
         &g_zero_vel, VELOCITY_ID, false, 0);
@@ -172,8 +172,6 @@ int main(int argc, char* argv[]) {
         function_basis_velocity.uniformRefine();
     }
     gsInfo << "Done." << std::endl;
-    // gsDebugVar(function_basis_pressure.basis(0));
-    // gsDebugVar(function_basis_velocity.basis(0));
 
     ////////////////////////
     // PROBLEM DEFINITION //
@@ -232,6 +230,8 @@ int main(int argc, char* argv[]) {
            << function_basis_pressure.minCwiseDegree() << std::endl
            << "\t\t\t- Maximum degree: " 
            << function_basis_pressure.maxCwiseDegree() << std::endl
+           << "\t\t\t- DoFs: " << trial_space_pressure.mapper().freeSize() 
+           << std::endl
            << "\t\t- Solution space for velocity " << std::endl
            << "\t\t\t- Field ID: " << trial_space_velocity.id() << std::endl 
            << "\t\t\t- Field dimensions: (" << trial_space_velocity.rows() 
@@ -240,8 +240,8 @@ int main(int argc, char* argv[]) {
            << function_basis_velocity.minCwiseDegree() << std::endl
            << "\t\t\t- Maximum degree: " 
            << function_basis_velocity.maxCwiseDegree() << std::endl
-           << "\t- Source Term: " << source_expr << std::endl
-           << "\t- Boundary Conditions: " << velocityBCs << std::endl
+           << "\t\t\t- DoFs: " << trial_space_velocity.mapper().freeSize() 
+           << std::endl
            << "\t- Total number of degrees of freedom: " 
            << assembler.numDofs() << std::endl;
 #ifdef _OPENMP
@@ -268,7 +268,7 @@ int main(int argc, char* argv[]) {
     gsInfo << "." << std::flush;
     // Assemble bilinear from resulting from pressure gradient
     assembler.assemble(
-        idiv(trial_space_velocity, geoMap) * trial_space_pressure.tr()
+        - idiv(trial_space_velocity, geoMap) * trial_space_pressure.tr()
         * meas(geoMap)
     );
     gsInfo << "." << std::flush;
@@ -285,8 +285,6 @@ int main(int argc, char* argv[]) {
     );
     gsInfo << "." << std::flush;
     // Assemble linear form resulting from the source term
-    // gsDebug << "trial_space_velocity has shape " << trial_space_velocity.rows() << "x" << trial_space_velocity.cols() << std::endl;
-    // gsDebug << "source_term has shape " << source_term.rows() << "x" << source_term.cols() << std::endl;
     assembler.assemble(
         trial_space_velocity * source_term * meas(geoMap)
     );
@@ -303,7 +301,7 @@ int main(int argc, char* argv[]) {
     const auto& system_matrix = assembler.matrix();
     const auto& rhs_vector = assembler.rhs();
     // Initialize linear solver
-    gsSparseSolver<>::BiCGSTABILUT solver;
+    gsSparseSolver<>::BiCGSTABDiagonal solver;
     solver.compute(system_matrix);
     // Solve the linear equation system
     gsMatrix<> complete_solution = solver.solve(rhs_vector);
@@ -325,7 +323,7 @@ int main(int argc, char* argv[]) {
     // Analytical solution expressions for pressure and velocity 
     gsFunctionExpr<> analytical_pressure_expression("x*(1-x)", SPATIAL_DIM);
     gsFunctionExpr<> analytical_velocity_expression(
-        "x^2*(1-x)^2*(2*y-6*y^2+4*y^3)",
+        " x^2*(1-x)^2*(2*y-6*y^2+4*y^3)",
         "-y^2*(1-y)^2*(2*x-6*x^2+4*x^3)", 
         SPATIAL_DIM
     );
@@ -389,13 +387,20 @@ int main(int argc, char* argv[]) {
     if (export_xml) {
         // Export solution file as xml
         gsInfo << "Starting the xml export ... " << std::flush;
-        gsMultiPatch<> mpsol;
-        gsMatrix<> full_solution;
-        gsFileData<> output;
-        output << velocity_coefficients;
-        numerical_velocity.extractFull(full_solution);
-        output << full_solution;
-        output.save("velocity-field.xml");
+        // Export pressure
+        gsMatrix<> full_solution_pressure;
+        gsFileData<> pressure_data_file;
+        pressure_data_file << pressure_coefficients;
+        numerical_pressure.extractFull(full_solution_pressure);
+        pressure_data_file << full_solution_pressure;
+        pressure_data_file.save("pressure-field.xml");
+        // Export velocity
+        gsMatrix<> full_solution_velocity;
+        gsFileData<> velocity_data_file;
+        velocity_data_file << velocity_coefficients;
+        numerical_velocity.extractFull(full_solution_velocity);
+        velocity_data_file << full_solution_velocity;
+        velocity_data_file.save("velocity-field.xml");
         gsInfo << "Done." << std::endl;
     }
 
