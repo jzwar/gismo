@@ -116,25 +116,34 @@ int main(int argc, char* argv[]) {
     velocityBCs.setGeoMap(patches);
     // function for the no-slip boundaries 
     // (first parameter is the value, second parameter the domain dimension)
-    gsConstantFunction<> g_zero_vel(0.0, SPATIAL_DIM);
+    gsConstantFunction<> g_zero(0.0, SPATIAL_DIM);
     // assign the boundary conditions for each boundary segment and each 
     // unknown / component
     velocityBCs.addCondition(0, boundary::west,  condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 0);
+        &g_zero, VELOCITY_ID, false, 0);
     velocityBCs.addCondition(0, boundary::west,  condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 1);
+        &g_zero, VELOCITY_ID, false, 1);
     velocityBCs.addCondition(0, boundary::east,  condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 0);
+        &g_zero, VELOCITY_ID, false, 0);
     velocityBCs.addCondition(0, boundary::east,  condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 1);
+        &g_zero, VELOCITY_ID, false, 1);
     velocityBCs.addCondition(0, boundary::south, condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 0);
+        &g_zero, VELOCITY_ID, false, 0);
     velocityBCs.addCondition(0, boundary::south, condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 1);
+        &g_zero, VELOCITY_ID, false, 1);
     velocityBCs.addCondition(0, boundary::north, condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 0);
+        &g_zero, VELOCITY_ID, false, 0);
     velocityBCs.addCondition(0, boundary::north, condition_type::dirichlet, 
-        &g_zero_vel, VELOCITY_ID, false, 1);
+        &g_zero, VELOCITY_ID, false, 1);
+    // Try to fix the pressure in the upper right corner to zero
+    gsBoundaryConditions<> pressureBCs;
+    pressureBCs.setGeoMap(patches);
+    // (corner,value, patch, unknown)
+    pressureBCs.addCornerValue(boundary::southwest, 0.0, 0, PRESSURE_ID);
+    pressureBCs.addCondition(0, boundary::west, condition_type::dirichlet,
+        &g_zero, PRESSURE_ID, false, 0);
+    // pressureBCs.addCondition(0, boundary::east, condition_type::dirichlet,
+    //     &g_zero, PRESSURE_ID, false, 0);
     gsInfo << "Done." << std::endl;
 
     /////////////////
@@ -193,7 +202,7 @@ int main(int argc, char* argv[]) {
         function_basis_velocity, VELOCITY_DIM, VELOCITY_ID
     );
     // Intitalize the multi-patch interfaces for the pressure space
-    trial_space_pressure.setup(0);
+    trial_space_pressure.setup(pressureBCs, dirichlet::l2Projection, 0);
     // Set the boundary conditions for the velocity field
     trial_space_velocity.setup(velocityBCs, dirichlet::l2Projection, 0);
     // Initialize the system
@@ -390,14 +399,12 @@ int main(int argc, char* argv[]) {
         // Export pressure
         gsMatrix<> full_solution_pressure;
         gsFileData<> pressure_data_file;
-        pressure_data_file << pressure_coefficients;
         numerical_pressure.extractFull(full_solution_pressure);
         pressure_data_file << full_solution_pressure;
         pressure_data_file.save("pressure-field.xml");
         // Export velocity
         gsMatrix<> full_solution_velocity;
         gsFileData<> velocity_data_file;
-        velocity_data_file << velocity_coefficients;
         numerical_velocity.extractFull(full_solution_velocity);
         velocity_data_file << full_solution_velocity;
         velocity_data_file.save("velocity-field.xml");
