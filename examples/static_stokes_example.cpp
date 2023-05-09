@@ -92,8 +92,8 @@ int main(int argc, char* argv[]) {
 
 #ifdef _OPENMP
     // make number of openmp threads configurable
-    index_t n_omp_threads{1};
-    cmd.addInt("p", "n_threads", "Number of threads used", n_omp_threads);
+    index_t numThreadsRequested = 1;
+    cmd.addInt("p", "n_threads", "Number of threads", numThreadsRequested);
 #endif
 
     // Parse command line options
@@ -285,9 +285,11 @@ int main(int argc, char* argv[]) {
            << "\t\t\t- Maximum degree: " 
            << function_basis_velocity.maxCwiseDegree() << std::endl;
 #ifdef _OPENMP
-  gsInfo << "\t- Available threads: " << omp_get_max_threads() << std::endl;
-  omp_set_num_threads(std::min(omp_get_max_threads(), n_omp_threads));
-  gsInfo << "\t- Number of threads: " << omp_get_num_threads() << std::endl;
+    index_t maxOmpThreads = omp_get_max_threads();
+    index_t numThreadsUsed = std::min(maxOmpThreads, numThreadsRequested);
+    gsInfo << "\t- Available threads: " << maxOmpThreads << std::endl;
+    gsInfo << "\t- Number of threads: " << numThreadsUsed << std::endl;
+    omp_set_num_threads(numThreadsUsed);
 #endif
     gsInfo << std::endl;
 
@@ -305,7 +307,7 @@ int main(int argc, char* argv[]) {
     // Write header of file
     errorFileOutput << "refinement level;" << "DoFs;"
                     << "hmax pressure;" << "l2 error pressure;"
-                    << "hmax velocity;" << "l2 error velocity;"
+                    << "hmax velocity;" << "l2 error velocity"
                     << std::endl;
 
     // Refine the basis with every loop, solve the system and compute the error
@@ -433,8 +435,7 @@ int main(int argc, char* argv[]) {
                         << hmax(r,PRESSURE_ID)  << ";"
                         << l2err(r,PRESSURE_ID) << ";"
                         << hmax(r,VELOCITY_ID)  << ";"
-                        << l2err(r,VELOCITY_ID) << ";"
-                        << std::endl;
+                        << l2err(r,VELOCITY_ID) << std::endl;
 
         // Refine the bases, unless it's the last iteration
         if(r!=numRefine) {
