@@ -195,6 +195,7 @@ int main(int argc, char* argv[]) {
             function_basis_pressure.uniformRefine();
             function_basis_velocity.uniformRefine();
         }
+        numRefine = 0;
     }
 
     gsInfo << "Done." << std::endl;
