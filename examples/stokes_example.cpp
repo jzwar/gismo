@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
              sample_rate);
 
   // Material constants
-  real_t viscosity{10};
+  real_t viscosity{1e-3};
   cmd.addReal("v", "visc", "Viscosity", viscosity);
 
   // Mesh options
@@ -90,14 +90,17 @@ int main(int argc, char* argv[]) {
   // Import mesh and load relevant information
   gsFileData<> fd(fn);
   gsInfo << "Loaded file " << fd.lastPath() << std::endl;
+
   // retrieve multi-patch data
   gsMultiPatch<> domain_patches;
   fd.getId(mp_id, domain_patches);
+
   // retrieve velocity boundary conditions from file
   gsBoundaryConditions<> velocity_bcs;
   fd.getId(vel_bc_id, velocity_bcs);
   velocity_bcs.setGeoMap(domain_patches);
   gsInfo << "Velocity boundary conditions:\n" << velocity_bcs << std::endl;
+
   // retrieve assembly options
   gsOptionList Aopt;
   fd.getId(ass_opt_id, Aopt);
@@ -114,38 +117,40 @@ int main(int argc, char* argv[]) {
   const index_t geomDim = domain_patches.geoDim();
   gsInfo << "Geometric dimension " << geomDim << std::endl;
 
-  //! [Refinement]
-  gsMultiBasis<> function_basis_velocity(
-      domain_patches,
-      true);  // true: poly-splines (not NURBS)
+  //! Create function bases for pressure and velocity
   gsMultiBasis<> function_basis_pressure(
       domain_patches,
       true);  // true: poly-splines (not NURBS)
+  gsMultiBasis<> function_basis_velocity(
+      domain_patches,
+      true);  // true: poly-splines (not NURBS)
 
-  // Degree elevation
-  for (int e = 0; e < degreeElevate; e++) {
-    function_basis_velocity.degreeElevate();
-    function_basis_pressure.degreeElevate();
-  }
-
-  // Taylor-Hood-ing that B****
-  function_basis_velocity.degreeElevate();
+  // Elevate the degree as desired by the user and increase the degree one 
+  // additional time for the velocity to obtain Taylor-Hood elements
+  function_basis_pressure.setDegree( 
+      function_basis_pressure.maxCwiseDegree() + degreeElevate
+  );
+  function_basis_velocity.setDegree( 
+      function_basis_velocity.maxCwiseDegree() + degreeElevate + 1
+  );
 
   // h-refine each basis (for performing the analysis)
-  for (int r = 0; r < numRefine; ++r) {
-    function_basis_velocity.uniformRefine();
+  for (int r=0; r<numRefine; ++r) {
     function_basis_pressure.uniformRefine();
+    function_basis_velocity.uniformRefine();
   }
 
   // Output user information
-  gsInfo << "Summary Velocity :\nPatches: " << domain_patches.nPatches()
-         << "\nMin-degree: " << function_basis_velocity.minCwiseDegree()
-         << "\nMax-degree: " << function_basis_velocity.maxCwiseDegree() << "\n"
-         << std::endl;
-  gsInfo << "Summary Pressure :\nPatches: " << domain_patches.nPatches()
+  gsInfo << "Summary Velocity:" << std::endl
+         << "Patches: " << domain_patches.nPatches()
+         << "\nMin-degree: " << function_basis_velocity.minCwiseDegree() 
+         << "\nMax-degree: " << function_basis_velocity.maxCwiseDegree()
+         << std::endl << std::endl;
+  gsInfo << "Summary Pressure:" << std::endl
+         << "Patches: " << domain_patches.nPatches()
          << "\nMin-degree: " << function_basis_pressure.minCwiseDegree()
-         << "\nMax-degree: " << function_basis_pressure.maxCwiseDegree() << "\n"
-         << std::endl;
+         << "\nMax-degree: " << function_basis_pressure.maxCwiseDegree()
+         << std::endl << std::endl;
 #ifdef _OPENMP
   gsInfo << "Available threads: " << omp_get_max_threads() << std::endl;
   omp_set_num_threads(std::min(omp_get_max_threads(), n_omp_threads));
@@ -175,6 +180,7 @@ int main(int argc, char* argv[]) {
   gsInfo << "Solution space for pressure (id=" << pressure_trial_space.id() 
          << ") has " << pressure_trial_space.rows() << " rows and " 
          << pressure_trial_space.cols() << " columns." << std::endl;
+  
   space velocity_trial_space = expr_assembler.getSpace(
     function_basis_velocity, geomDim, VELOCITY_ID
   );
@@ -183,12 +189,11 @@ int main(int argc, char* argv[]) {
          << velocity_trial_space.cols() << " columns." << std::endl;
 
   // Solution vector and solution variable
-  gsMatrix<> pressure_coefficients;
+  gsMatrix<> full_solution;
   solution pressure_field = 
-      expr_assembler.getSolution(pressure_trial_space, pressure_coefficients);
-  gsMatrix<> velocity_coefficients;
+      expr_assembler.getSolution(pressure_trial_space, full_solution);
   solution velocity_field =
-      expr_assembler.getSolution(velocity_trial_space, velocity_coefficients);
+      expr_assembler.getSolution(velocity_trial_space, full_solution);
 
   // Intitalize multi-patch interfaces for pressure field
   pressure_trial_space.setup(0);
@@ -207,6 +212,7 @@ int main(int argc, char* argv[]) {
   //////////////
   // Assembly //
   //////////////
+
   gsInfo << "Starting assembly of linear system ..." << std::flush;
   timer.restart();
 
@@ -230,25 +236,22 @@ int main(int argc, char* argv[]) {
 
   gsInfo << "Solving the linear system of equations ..." << std::flush;
   timer.restart();
+
   const auto& system_matrix = expr_assembler.matrix();
   const auto& rhs_vector = expr_assembler.rhs();
 
   // Initialize linear solver
-  // gsSparseSolver<>::CGDiagonal solver;
-  // gsSparseSolver<>::BiCGSTABILUT solver;
-  gsSparseSolver<>::BiCGSTABDiagonal solver;
+  gsSparseSolver<>::BiCGSTABILUT solver;
   solver.compute(system_matrix);
-  gsMatrix<> complete_solution = solver.solve(rhs_vector);
+  full_solution = solver.solve(rhs_vector);
 
   solving_time_ls += timer.stop();
   gsInfo << "\tFinished" << std::endl;
 
-  pressure_coefficients = complete_solution;
-  velocity_coefficients = complete_solution;
-
   ////////////////////
   // Postprocessing //
   ////////////////////
+
   gsExprEvaluator<> expression_evaluator(expr_assembler);
 
   // Evaluate objective function
@@ -264,54 +267,47 @@ int main(int argc, char* argv[]) {
   // Export and Visualization //
   //////////////////////////////
 
-  // // Old-school export
-  // expression_evaluator.writeParaview(velocity_field, geom_expr,
-  //                                    "velocity");
-  // expression_evaluator.writeParaview(pressure_field, geom_expr,
-  //                                    "pressure");
-
   // Generate Paraview File
-  gsInfo << "\nStarting the paraview export ..." << std::flush;
-  timer.restart();
   if (plot) {
+    gsInfo << "\nStarting the paraview export ..." << std::flush;
+    timer.restart();
+
     gsParaviewCollection collection("ParaviewOutput/solution",
                                     &expression_evaluator);
     collection.options().setSwitch("plotElements", true);
     collection.options().setInt("plotElements.resolution", sample_rate);
     collection.newTimeStep(&domain_patches);
-    collection.addField(velocity_field, "velocity");
     collection.addField(pressure_field, "pressure");
+    collection.addField(velocity_field, "velocity");
     collection.saveTimeStep();
     collection.save();
 
-  } else {
-    gsInfo << "skipping";
+    plotting_time += timer.stop();
+    gsInfo << "\tFinished" << std::endl;
   }
-  gsInfo << "\tFinished" << std::endl;
 
   // Export solution file as xml
-  gsInfo << "Starting the xml export ..." << std::flush;
   if (export_xml) {
-    gsMatrix<> full_solution_velocity;
-    gsFileData<> output;
-    output << velocity_coefficients;  // only computed quantities without fixed BCs
-    velocity_field.extractFull(
-        full_solution_velocity);  // patch-wise solution with BCs
-    output << full_solution_velocity;
-    output.save("velocity_field.xml");
+    gsInfo << "Starting the xml export ..." << std::flush;
+
+    // Export pressure
     gsMatrix<> full_solution_pressure;
     gsFileData<> output_pressure;
-    output_pressure
-        << pressure_coefficients;  // only computed quantities without fixed BCs
     pressure_field.extractFull(
         full_solution_pressure);  // patch-wise solution with BCs
     output_pressure << full_solution_pressure;
     output_pressure.save("pressure_field.xml");
-  } else {
-    gsInfo << "skipping";
+
+    // Export velocity
+    gsMatrix<> full_solution_velocity;
+    gsFileData<> output;
+    velocity_field.extractFull(
+        full_solution_velocity);  // patch-wise solution with BCs
+    output << full_solution_velocity;
+    output.save("velocity_field.xml");
+
+    gsInfo << "\t\tFinished" << std::endl;
   }
-  plotting_time += timer.stop();
-  gsInfo << "\t\tFinished" << std::endl;
 
   // User output infor timings
   gsInfo << "\n\nTotal time: "
