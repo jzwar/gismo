@@ -77,8 +77,8 @@ int main(int argc, char* argv[]) {
   cmd.addInt("a", "assembly_options_id",
              "ID of the assembler options in mesh file", ass_opt_id);
 #ifdef _OPENMP
-  int n_omp_threads{1};
-  cmd.addInt("p", "n_threads", "Number of threads used", n_omp_threads);
+  int numThreadsRequested{1};
+  cmd.addInt("p", "n_threads", "Number of threads used", numThreadsRequested);
 #endif
 
   // Parse command line options
@@ -153,9 +153,11 @@ int main(int argc, char* argv[]) {
          << "\nMax-degree: " << function_basis_pressure.maxCwiseDegree()
          << std::endl << std::endl;
 #ifdef _OPENMP
-  gsInfo << "Available threads: " << omp_get_max_threads() << std::endl;
-  omp_set_num_threads(std::min(omp_get_max_threads(), n_omp_threads));
-  gsInfo << "Number of threads: " << omp_get_num_threads() << std::endl;
+  index_t maxOmpThreads = omp_get_max_threads();
+  index_t numThreadsUsed = std::min(maxOmpThreads, numThreadsRequested);
+  gsInfo << "Available threads: " << maxOmpThreads << std::endl;
+  gsInfo << "Number of threads: " << numThreadsUsed << std::endl << std::endl;
+  omp_set_num_threads(numThreadsUsed);
 #endif
 
   ///////////////////
