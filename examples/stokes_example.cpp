@@ -42,9 +42,10 @@ int main(int argc, char* argv[]) {
   gsCmdLine cmd("Stokes Example");
 
   // Provide vtk data
-  bool plot = false;
-  cmd.addSwitch("plot",
-                "Create a ParaView visualization file with the solution", plot);
+  bool dont_plot = false;
+  cmd.addSwitch("no-plot",
+                "Suppress generation of a ParaView visualization file with " 
+                "the solution", dont_plot);
   bool export_xml = false;
   cmd.addSwitch("export-xml", "Export solution into g+smo xml format.",
                 export_xml);
@@ -268,7 +269,7 @@ int main(int argc, char* argv[]) {
   //////////////////////////////
 
   // Generate Paraview File
-  if (plot) {
+  if (!dont_plot) {
     gsInfo << "\nStarting the paraview export ..." << std::flush;
     timer.restart();
 
