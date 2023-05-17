@@ -18,6 +18,7 @@ namespace gismo {
 // forward declarations
 template<typename T> class gsEigenCGIdentity;
 template<typename T> class gsEigenCGDiagonal;
+template<typename T> class gsEigenLeastSquaresCG;
 template<typename T> class gsEigenBiCGSTABIdentity;
 template<typename T> class gsEigenBiCGSTABDiagonal;
 template<typename T> class gsEigenBiCGSTABILUT;
@@ -68,8 +69,9 @@ class gsSparseSolver
 public:
     typedef memory::unique_ptr<gsSparseSolver> uPtr;
 
-    typedef gsEigenCGIdentity<T>           CGIdentity ;
+    typedef gsEigenCGIdentity<T>           CGIdentity;
     typedef gsEigenCGDiagonal<T>           CGDiagonal;
+    typedef gsEigenLeastSquaresCG<T>       LeastSquaresCG;
     typedef gsEigenBiCGSTABDiagonal<T>     BiCGSTABDiagonal;
     typedef gsEigenBiCGSTABIdentity<T>     BiCGSTABIdentity;
     typedef gsEigenBiCGSTABILUT<T>         BiCGSTABILUT;
@@ -137,6 +139,7 @@ public:
         if (slv=="LU")               return uPtr(new LU());
         if (slv=="CGIdentity")       return uPtr(new CGIdentity());
         if (slv=="BiCGSTABIdentity") return uPtr(new BiCGSTABIdentity());
+        if (slv=="LeastSquaresCG")   return uPtr(new LeastSquaresCG());
         // if (slv=="MINRES") return uPtr(new MINRES());
         // if (slv=="GMRES")  return uPtr(new GMRES());
         // if (slv=="DGMRES") return uPtr(new DGMRES());
@@ -189,15 +192,16 @@ std::ostream &operator<<(std::ostream &os, const gsSparseSolver<T>& b)
         }                                                               \
     };
 
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenCGIdentity,     CGIdentity)
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenCGDiagonal,     CGDiagonal)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenCGIdentity,       CGIdentity)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenCGDiagonal,       CGDiagonal)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenLeastSquaresCG,   LeastSquaresCG)
 GISMO_EIGEN_SPARSE_SOLVER (gsEigenBiCGSTABIdentity, BiCGSTABIdentity)
 GISMO_EIGEN_SPARSE_SOLVER (gsEigenBiCGSTABDiagonal, BiCGSTABDiagonal)
 GISMO_EIGEN_SPARSE_SOLVER (gsEigenBiCGSTABILUT,     BiCGSTABILUT)
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenSparseLU,       SparseLU)
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenSparseQR,       SparseQR)
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenSimplicialLDLT, SimplicialLDLT)
-GISMO_EIGEN_SPARSE_SOLVER (gsEigenSimplicialLLT, SimplicialLLT)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenSparseLU,         SparseLU)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenSparseQR,         SparseQR)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenSimplicialLDLT,   SimplicialLDLT)
+GISMO_EIGEN_SPARSE_SOLVER (gsEigenSimplicialLLT,    SimplicialLLT)
 
 #ifdef GISMO_WITH_SUPERLU
     GISMO_EIGEN_SPARSE_SOLVER (gsEigenSuperLU, SuperLU)

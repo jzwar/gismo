@@ -244,7 +244,8 @@ int main(int argc, char* argv[]) {
   const auto& rhs_vector = expr_assembler.rhs();
 
   // Initialize linear solver
-  gsSparseSolver<>::BiCGSTABILUT solver;
+  // gsSparseSolver<>::BiCGSTABILUT solver;
+  gsSparseSolver<>::LeastSquaresCG solver;
   solver.compute(system_matrix);
   full_solution = solver.solve(rhs_vector);
 

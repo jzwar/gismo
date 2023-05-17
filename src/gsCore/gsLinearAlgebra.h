@@ -153,6 +153,10 @@ public:
     typedef Eigen::ConjugateGradient<Eigen::SparseMatrix<T,0,index_t>, 
             Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<T> > CGDiagonal;
 
+    /// Least-Squares conjugate gradient iterative solver
+    typedef Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<T,0,index_t>,
+            Eigen::LeastSquareDiagonalPreconditioner<T> > LeastSquaresCG;
+
     /// BiCGSTAB with Incomplete LU factorization with dual-threshold strategy
     typedef Eigen::BiCGSTAB<Eigen::SparseMatrix<T,0,index_t>,
                             Eigen::IncompleteLUT<T, index_t> > BiCGSTABILUT;
