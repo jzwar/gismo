@@ -198,7 +198,127 @@ boundary_conditions = {
                 "type": "Dirichlet",
                 "unknown": "1",
                 "component": "2",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID3",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "0",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID3",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "1",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID3",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "2",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID4",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "0",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID4",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "1",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID4",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "2",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID5",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "0",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID5",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "1",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID5",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "2",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID6",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "0",
+                "function": "0",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID6",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "1",
                 "function": "1",
+            },
+        },
+        {
+            "tag": "bc",
+            "attributes": {
+                "name": "BID6",
+                "type": "Dirichlet",
+                "unknown": "1",
+                "component": "2",
+                "function": "0",
             },
         },
     ],
@@ -232,6 +352,7 @@ if PLOT:
 def parametrization_function(x, thickness=THICKNESS):
     # return (x[:, 2] * 0.2 + 0.05).reshape(-1, 1)
     return thickness*np.ones((x.shape[0],1))
+    # return 0.2 - 0.2 * (x[:,2] < 0.01 + x[:,2] > 0.099)
 
 
 # Generator description
@@ -289,12 +410,19 @@ def identifier_function(deformation_function, face_id):
 
 
 print('Identifying boundaries')
-multipatch.boundary_from_function(identifier_function(def_fun, 4))  # BID 2 - Inlet
-multipatch.boundary_from_function(identifier_function(def_fun, 5))  # BID 3 - Outlet
-# multipatch.boundary_from_function(identifier_function(def_fun, 2))  # BID 4
-# multipatch.boundary_from_function(identifier_function(def_fun, 3))  # BID 5
-# multipatch.boundary_from_function(identifier_function(def_fun, 4))  # BID 6
-# multipatch.boundary_from_function(identifier_function(def_fun, 5))  # BID 7
+# BID 1 - Void
+# BID 2 - x_min: Wall
+multipatch.boundary_from_function(identifier_function(def_fun, 0))
+# BID 3 - x_max: Wall
+multipatch.boundary_from_function(identifier_function(def_fun, 1))
+# BID 4 - y_min: Wall
+multipatch.boundary_from_function(identifier_function(def_fun, 2))
+# BID 5 - y_max: Wall
+multipatch.boundary_from_function(identifier_function(def_fun, 3))
+# BID 6 - z_min: Inlet
+multipatch.boundary_from_function(identifier_function(def_fun, 4))
+# BID 7 - z_max: Outlet
+multipatch.boundary_from_function(identifier_function(def_fun, 5))
 
 # Interfaces, a place of change,
 # Now detected, in a range,
@@ -312,7 +440,7 @@ multipatch.boundary_from_function(identifier_function(def_fun, 5))  # BID 3 - Ou
 # A true microstructured beauty born.
 print('Exporting to G+Smo')
 gus.spline.io.gismo.export(
-    "microstructure3D.xml",
+    "3Dmicrostructure.xml",
     multipatch=multipatch,
     indent=True,  # Default
     labeled_boundaries=True,  # Default
