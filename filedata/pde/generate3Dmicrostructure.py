@@ -20,9 +20,15 @@ Thy most obedient and humble servant,
 Jacques
 """
 
+##############
+# PARAMETERS #
+##############
+
+PLOT = False
+THICKNESS = 0.25
 V_IN = 0.5
-nodge = 0.4
 gus.settings.NTHREADS = 8
+
 
 ##################
 # G+Smo SETTINGS #
@@ -210,23 +216,26 @@ gismo_options.append(boundary_conditions)
 # Elegant beauty, warming the heart,
 # A prismatic marvel, beyond compare,
 # With slender grace, beyond compare.
+print('Creating macrospline')
 box = gus.spline.create.box(1,1)
 def_fun = box.bspline.create.revolved(
     axis=[1,0,0], center=[0,-1,0], angle=90, n_knot_spans=None, degree=True
 )
-# def_fun.show()
+if PLOT:
+    def_fun.show()
 
 
 # Optional (in the form of a haiku)
 # Multiplying by point two,
 # Adding point zero five next,
 # Equation complete.
-def parametrization_function(x, thickness=0.25):
+def parametrization_function(x, thickness=THICKNESS):
     # return (x[:, 2] * 0.2 + 0.05).reshape(-1, 1)
     return thickness*np.ones((x.shape[0],1))
 
 
 # Generator description
+print('Defining geometry')
 generator = gus.spline.microstructure.Microstructure()
 generator.microtile = gus.spline.microstructure.tiles.Cube3D()
 generator.tiling = [2, 3, 3]  # Per knot span
@@ -252,9 +261,12 @@ generator.parametrization_function = parametrization_function
 # Their plotting takes some time, not lost,
 # For in their beauty we can find,
 # A microstructured sight, refined.
+print('Creating microstructure')
 ms = generator.create()
-# gus.show(ms, control_points=False, resolutions=3, knots=False)
+if PLOT:
+    gus.show(ms, control_points=False, resolutions=3, knots=False)
 
+print('Converting to multi-patch')
 # Use the list of splines to create an xml file
 multipatch = gus.spline.splinepy.Multipatch(ms)
 
@@ -276,6 +288,7 @@ def identifier_function(deformation_function, face_id):
     return identifier_function
 
 
+print('Identifying boundaries')
 multipatch.boundary_from_function(identifier_function(def_fun, 4))  # BID 2 - Inlet
 multipatch.boundary_from_function(identifier_function(def_fun, 5))  # BID 3 - Outlet
 # multipatch.boundary_from_function(identifier_function(def_fun, 2))  # BID 4
@@ -297,10 +310,11 @@ multipatch.boundary_from_function(identifier_function(def_fun, 5))  # BID 3 - Ou
 # Interfaces, now with elegance,
 # Their splines, exported in desired form,
 # A true microstructured beauty born.
+print('Exporting to G+Smo')
 gus.spline.io.gismo.export(
     "microstructure3D.xml",
     multipatch=multipatch,
     indent=True,  # Default
     labeled_boundaries=True,  # Default
-     options=gismo_options  # (Here you can add options)
+    options=gismo_options  # (Here you can add options)
 )
