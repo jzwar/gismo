@@ -308,7 +308,7 @@ boundary_conditions = {
                 "type": "Dirichlet",
                 "unknown": "1",
                 "component": "1",
-                "function": "1",
+                "function": "0",
             },
         },
         {
@@ -318,7 +318,7 @@ boundary_conditions = {
                 "type": "Dirichlet",
                 "unknown": "1",
                 "component": "2",
-                "function": "0",
+                "function": "1",
             },
         },
     ],
