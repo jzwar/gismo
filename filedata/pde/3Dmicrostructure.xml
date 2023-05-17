@@ -30993,6 +30993,18 @@
     <bc name="BID1" type="Dirichlet" unknown="1" component="2" function="0" />
     <bc name="BID2" type="Dirichlet" unknown="1" component="0" function="0" />
     <bc name="BID2" type="Dirichlet" unknown="1" component="1" function="0" />
-    <bc name="BID2" type="Dirichlet" unknown="1" component="2" function="1" />
+    <bc name="BID2" type="Dirichlet" unknown="1" component="2" function="0" />
+    <bc name="BID3" type="Dirichlet" unknown="1" component="0" function="0" />
+    <bc name="BID3" type="Dirichlet" unknown="1" component="1" function="0" />
+    <bc name="BID3" type="Dirichlet" unknown="1" component="2" function="0" />
+    <bc name="BID4" type="Dirichlet" unknown="1" component="0" function="0" />
+    <bc name="BID4" type="Dirichlet" unknown="1" component="1" function="0" />
+    <bc name="BID4" type="Dirichlet" unknown="1" component="2" function="0" />
+    <bc name="BID5" type="Dirichlet" unknown="1" component="0" function="0" />
+    <bc name="BID5" type="Dirichlet" unknown="1" component="1" function="0" />
+    <bc name="BID5" type="Dirichlet" unknown="1" component="2" function="0" />
+    <bc name="BID6" type="Dirichlet" unknown="1" component="0" function="0" />
+    <bc name="BID6" type="Dirichlet" unknown="1" component="1" function="1" />
+    <bc name="BID6" type="Dirichlet" unknown="1" component="2" function="0" />
   </boundaryConditions>
 </xml>
