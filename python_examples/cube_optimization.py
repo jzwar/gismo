@@ -174,45 +174,48 @@ gismo_options = [
         ],
     },
 ]
+
 gus.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling_x = 24
-tiling_y = 12
+depth = 1/4
+tiling = [8, 4, 1]
 nthreads= 24
 load_b_tiles = 1
-para_deg = 2
-design_vars_x = 8
-design_vars_y = 4
+para_degs = [0, 0, 0]
+scaling_factor_objective_function = 100
+design_vars = tiling # [8, 4, 1]
 
 
-filename = "lattice_structure_" + str(tiling_x) + "x" + str(tiling_y) + ".xml"
+filename = ("lattice_structure_" + str(tiling[0]) + "x" + str(tiling[1]) + "x" + str(tiling[2]) + ".xml")
 log_file = "log_file.tsv"
 
 def prepare_microstructure(parameters):
     generator = gus.spline.microstructure.Microstructure()
-    deformation_function = gus.Bezier(
-        degrees=[1, 1],
-        control_points=[[0, 0], [length, 0], [0, height], [length, height]],
-    )
-    deformation_function = deformation_function.bspline
-    deformation_function.insert_knots(0,[i * (1/tiling_x) for i in range(1,tiling_x)])
-    deformation_function.insert_knots(1,[i * (1/tiling_y) for i in range(1,tiling_y)])
+    deformation_function = gus.spline.create.box(length, height, depth).bspline
+    for i, t in enumerate(tiling):
+        if t < 2:
+            continue
+        deformation_function.insert_knots(i, [j * (1 / t) for j in range(1, t)])
+
     generator.deformation_function = deformation_function
-    generator.tiling=[1,1]
-    generator.microtile = gus.spline.microstructure.tiles.DoubleLatticeTile()
+    generator.tiling=[1,1,1]
+    generator.microtile = gus.spline.microstructure.tiles.Cube3D()
     
-    iknots = [i * (1/(design_vars_x - para_deg)) for i in range(1, design_vars_x - para_deg)]
-    jknots = [i * (1/(design_vars_y - para_deg)) for i in range(1, design_vars_y - para_deg)]
-    pdegrees=[para_deg, para_deg]
-    pknot_vectors=[ [0] * (para_deg + 1) + k + [1] * (para_deg + 1) for k in 
-                  [iknots,jknots]]
-    pcontrol_points=parameters.reshape(design_vars_x * design_vars_y,1)
+    # Create Parameter spline
+    knot_vectors = []
+    for i, (p, d) in enumerate(zip(para_degs,design_vars)):
+        i_knots = [j * (1/(d - p)) for j in range(1, d - p)]
+        knot_vectors.append(
+            [0] * (p + 1) + i_knots + [1] * (p + 1)
+        )
+    
     parameter_spline = gus.BSpline(
-        degrees=pdegrees,
-        knot_vectors=pknot_vectors,
-        control_points=pcontrol_points
+        degrees=para_degs,
+        knot_vectors=knot_vectors,
+        control_points=parameters.reshape(-1,1)
     )
+
     def foo(x):
         """
         Parametrization Function (determines thickness)
@@ -220,49 +223,44 @@ def prepare_microstructure(parameters):
         return parameter_spline.evaluate(x)
 
     def foo_deriv(x):
-        basis_function_matrix = np.zeros((x.shape[0],parameter_spline.control_points.shape[0]))
+        basis_function_matrix = np.zeros((
+            x.shape[0],
+            parameter_spline.control_points.shape[0]
+        ))
         basis_functions, support = parameter_spline.basis_and_support(x)
         np.put_along_axis(basis_function_matrix, support, basis_functions, axis=1)
-        return basis_function_matrix.reshape(1, 1, -1)
+        return basis_function_matrix.reshape(x.shape[0], 1, -1)
 
     generator.parametrization_function = foo
     generator.parameter_sensitivity_function = foo_deriv
-    my_ms, my_ms_der = generator.create(contact_length=0.5)
+    my_ms, my_ms_der = generator.create(contact_length=0.3)
 
     def identifier_function(deformation_function, face_id):
         boundary_spline = deformation_function.extract_boundaries(face_id)[0]
 
         def identifier_function(x):
             distance_2_boundary = boundary_spline.proximities(
-                queries=x, initial_guess_sample_resolutions=4, tolerance=1e-9
+                queries=x, initial_guess_sample_resolutions=[4,4], tolerance=1e-9
             )[3]
             return distance_2_boundary.flatten() < 1e-8
 
         return identifier_function
 
     def identifier_function_neumann(x):
-        return (x[:,0] >= (tiling_x - load_b_tiles) / tiling_x * length-1e-12)
+        return (x[:,0] >= (tiling[0] - load_b_tiles) / tiling[1] * length-1e-12)
 
 
     multipatch = gus.spline.splinepy.Multipatch(my_ms)
     multipatch.add_fields(*my_ms_der, check_compliance=True, check_conformity=True)
     multipatch.determine_interfaces()
-    multipatch.boundary_from_function(
-        identifier_function(generator.deformation_function, 0)
-    )
-    multipatch.boundary_from_function(
-        identifier_function(generator.deformation_function, 1)
-    )
-    multipatch.boundary_from_function(
-        identifier_function(generator.deformation_function, 2)
-    )
-    multipatch.boundary_from_function(
-        identifier_function(generator.deformation_function, 3)
-    )
-
+    for i in range(deformation_function.dim * 2):
+        multipatch.boundary_from_function(
+            identifier_function(generator.deformation_function, i)
+        )
     multipatch.boundary_from_function(
         identifier_function_neumann, mask=[5]
     )
+    gus.show(multipatch.splines, control_points=False, knots=False, resolutions=3)
     gus.spline.io.gismo.export(filename, multipatch=multipatch, options=gismo_options, export_fields=True)
 
 def read_jacobians():
@@ -273,7 +271,7 @@ def read_objective_function():
     obj_val =float(np.genfromtxt(fname="objective_function.out"))
     return obj_val
 
-def run_gismo(sensitivities=False, plot=False, refinement=False):
+def run_gismo(sensitivities=False, plot=False, refinement=None):
     process_call = [
           "./linear_elasticity_expressions",
           "-f",
@@ -292,10 +290,10 @@ def run_gismo(sensitivities=False, plot=False, refinement=False):
         process_call += [
             "--plot"
         ]
-    if refinement:
+    if refinement is not None:
         process_call += [
           "-r",
-          "1",
+          str(refinement),
           ]
     text = subprocess.run(process_call,
         capture_output=True,encoding="ascii")
@@ -303,12 +301,12 @@ def run_gismo(sensitivities=False, plot=False, refinement=False):
 
 def evaluate_iteration(x):
     prepare_microstructure(x)
-    run_gismo(sensitivities=False, refinement=True)
-    return read_objective_function() * 100
+    run_gismo(sensitivities=True, refinement=1)
+    return read_objective_function() * scaling_factor_objective_function
 
 def evaluate_jacobian(x):
     prepare_microstructure(x)
-    run_gismo(sensitivities=True, refinement=True)
+    run_gismo(sensitivities=True, refinement=1)
     with open(log_file, "a") as log:
         log.write(
                 str(read_objective_function()) 
@@ -316,18 +314,19 @@ def evaluate_jacobian(x):
                 + " ".join(str(xx) for xx in (read_jacobians() * 100).tolist()
                            )
                 )
-    return read_jacobians() * 100
+    return read_jacobians() * scaling_factor_objective_function
 
 def call_back_optimization(x):
     print(f"{read_objective_function()} " + "  ".join(str(xx) for xx in x.tolist()))
 
 def main():
-    initial_guess = np.ones((design_vars_x * design_vars_y, 1))*0.10
+    n_design_vars = np.prod(design_vars)
+    initial_guess = np.ones((n_design_vars, 1)) * 0.30
 
     # Mass constraint
-    A = np.ones((1, design_vars_x * design_vars_y))
+    A = np.ones((1, n_design_vars))
     c = 0
-    d = design_vars_x * design_vars_y * 0.10
+    d = n_design_vars * 0.30
     C2 = scipy.optimize.LinearConstraint(A, c, d)
 
     optim = scipy.optimize.minimize(
@@ -335,7 +334,7 @@ def main():
         initial_guess,
         method='SLSQP',
         jac=evaluate_jacobian,
-        bounds = [(0.0111,0.249) for _ in range(design_vars_x * design_vars_y)],
+        bounds = [(0.01,0.49) for _ in range(n_design_vars)],
         constraints=C2,
         options={'disp': True},
         callback = call_back_optimization
