@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
   bool export_xml = false;
   cmd.addSwitch("export-xml", "Export solution into g+smo xml format.",
                 export_xml);
-  int sample_rate{4};
+  int sample_rate{9};
   cmd.addInt("q", "sample-rate", "Sample rate of splines for export",
              sample_rate);
 
@@ -374,9 +374,10 @@ int main(int argc, char* argv[]) {
     gsParaviewCollection collection("ParaviewOutput/solution",
                                     &expression_evaluator);
     collection.options().setSwitch("plotElements", true);
+    collection.options().setInt("numPoints", sample_rate);
     collection.options().setInt("plotElements.resolution", sample_rate);
     collection.newTimeStep(&mp);
-    collection.addField(solution_expression, "numerical solution");
+    collection.addField(solution_expression, "displacement");
     collection.saveTimeStep();
     collection.save();
 
