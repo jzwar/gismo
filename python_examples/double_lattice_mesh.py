@@ -1,4 +1,4 @@
-import gustaf as gus
+import splinepy as sp
 import numpy as np
 import scipy
 import subprocess
@@ -175,14 +175,14 @@ gismo_options = [
     },
 ]
 
-gus.settings.NTHREADS = 8
+sp.settings.NTHREADS = 8
 length = 2
 height = 1
-tiling = [4,4]
-para_degs = [1,1]
-design_vars = [4,4]
-nthreads= 1
-load_b_tiles = 1
+tiling = [24, 12]
+para_degs = [1, 1]
+design_vars = [10, 5]
+nthreads= 12 
+load_b_tiles = 2
 scaling_factor_objective_function = 100
 
 # Initialize log files
@@ -195,7 +195,7 @@ last_parameters=None
 
 def prepare_microstructure(parameters):
     # Create Deformation function (insert knots here then use tiling [1,1])
-    deformation_function = gus.Bezier(
+    deformation_function = sp.Bezier(
         degrees=[1, 1],
         control_points=[[0, 0], [length, 0], [0, height], [length, height]],
     ).bspline
@@ -211,7 +211,7 @@ def prepare_microstructure(parameters):
         knot_vectors.append(
             [0] * (p + 1) + i_knots + [1] * (p + 1)
         )
-    parameter_spline = gus.BSpline(
+    parameter_spline = sp.BSpline(
         degrees=para_degs,
         knot_vectors=knot_vectors,
         control_points=parameters.reshape(-1,1)
@@ -230,10 +230,10 @@ def prepare_microstructure(parameters):
         return basis_function_matrix.reshape(x.shape[0], 1, -1)
 
     # Initialize microstructure generator and assign values
-    generator = gus.spline.microstructure.Microstructure()
+    generator = sp.microstructure.Microstructure()
     generator.deformation_function = deformation_function
     generator.tiling=[1,1]
-    generator.microtile = gus.spline.microstructure.tiles.DoubleLatticeTile()
+    generator.microtile = sp.microstructure.tiles.DoubleLatticeTile()
     generator.parametrization_function = parametrization_function
     generator.parameter_sensitivity_function = parameter_sensitivity_function
     my_ms, my_ms_der = generator.create(contact_length=0.5)
@@ -244,7 +244,8 @@ def prepare_microstructure(parameters):
 
         def identifier_function(x):
             distance_2_boundary = boundary_spline.proximities(
-                queries=x, initial_guess_sample_resolutions=[4], tolerance=1e-9
+                queries=x, initial_guess_sample_resolutions=[4], tolerance=1e-9,
+                return_verbose=True
             )[3]
             return distance_2_boundary.flatten() < 1e-8
 
@@ -254,8 +255,8 @@ def prepare_microstructure(parameters):
         return (x[:,0] >= (tiling[0] - load_b_tiles) / tiling[0] * length-1e-12)
 
 
-    multipatch = gus.spline.splinepy.Multipatch(my_ms)
-    multipatch.add_fields(*my_ms_der, check_compliance=True, check_conformity=True)
+    multipatch = sp.Multipatch(my_ms)
+    multipatch.add_fields(my_ms_der)
     multipatch.determine_interfaces()
     for i in range(deformation_function.dim * 2):
         multipatch.boundary_from_function(
@@ -265,7 +266,7 @@ def prepare_microstructure(parameters):
     multipatch.boundary_from_function(
         identifier_function_neumann, mask=[5]
     )
-    gus.spline.io.gismo.export(filename, multipatch=multipatch, options=gismo_options, export_fields=True)
+    sp.io.gismo.export(filename, multipatch=multipatch, options=gismo_options, export_fields=True)
 
 def read_jacobians():
     jacs =np.genfromtxt(fname="sensitivities.out")
@@ -281,6 +282,7 @@ def run_gismo(sensitivities=False, plot=False, refinement=None):
           "-f",
           filename, 
           "--compute-objective-function",
+          "-q", str(16),
           "--output-to-file"
         ]
     if nthreads > 1:
