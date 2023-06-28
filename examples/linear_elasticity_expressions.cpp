@@ -161,7 +161,7 @@ int main(int argc, char* argv[]) {
 
   // Setup values for timing
   double setup_time(0), assembly_time_ls(0), solving_time_ls(0),
-      assembly_time_adj_ls(0), solving_time_adj_ls(0),
+      assembly_time_adj_ls(0), solving_time_adj_ls(0), volume_time(0),
       objective_function_time(0), plotting_time(0);
   gsStopwatch timer;
   timer.restart();
@@ -218,6 +218,11 @@ int main(int argc, char* argv[]) {
       "compute-sensitivities",
       "Compute sensitivities with respect to a given objective distribution",
       compute_sensitivities);
+  bool compute_volume{false};
+  cmd.addSwitch(
+      "compute-volume",
+      "Compute volume of the geometry",
+      compute_volume);
   bool output_to_file{false};
   cmd.addSwitch(
       "output-to-file",
@@ -403,6 +408,27 @@ int main(int argc, char* argv[]) {
   plotting_time += timer.stop();
   gsInfo << "\t\tFinished" << std::endl;
 
+  ////////////////////////////////////////////////////////////////
+  // Compute Volume in case the Macro geometry has been changed //
+  ////////////////////////////////////////////////////////////////
+  if (compute_volume) {
+    gsInfo << "Computing the volume of the geometry ... " << std::flush;
+    timer.restart();
+    // Compute volume of domain
+    gsExprEvaluator<> expr_evaluator(expr_assembler);
+    real_t volume_value = expression_evaluator.integral(
+      meas(geom_expr)
+    );
+    gsInfo << "Value is " << volume_value << "." << std::flush;
+    gsInfo << "\tFinished" << std::endl;
+    if (output_to_file) {
+      std::ofstream volume_file("volume.out");
+      volume_file << std::setprecision(25) << volume_value;
+      volume_file.close();
+      volume_time += timer.stop();
+    }
+  }
+
   ////////////////////////////////////////////////////
   // Optimization Requirements - Objective Function //
   ////////////////////////////////////////////////////
@@ -576,6 +602,7 @@ int main(int argc, char* argv[]) {
   gsInfo << "                       Setup: " << setup_time << "\n";
   gsInfo << "      Assembly Linear System: " << assembly_time_ls << "\n";
   gsInfo << "       Solving Linear System: " << solving_time_ls << "\n";
+  gsInfo << "            Computing volume: " << volume_time << "\n";
   gsInfo << " Assembly objective function: " << assembly_time_ls << "\n";
   gsInfo << "     Assembly adjoint system: " << assembly_time_adj_ls << "\n";
   gsInfo << "      Solving adjoint system: " << solving_time_adj_ls << "\n";
