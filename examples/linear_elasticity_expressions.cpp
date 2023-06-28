@@ -419,7 +419,24 @@ int main(int argc, char* argv[]) {
     real_t volume_value = expression_evaluator.integral(
       meas(geom_expr)
     );
-    gsInfo << "Value is " << volume_value << "." << std::flush;
+    gsInfo << "Value is " << volume_value << ", " << std::flush;
+    // Compute the derivative of the volume of the domain with respect to the
+    // control points
+    // Auxiliary expressions
+    auto jacobian = jac(geom_expr);                      // validated
+    auto inv_jacs = jacobian.ginv();                     // validated
+    auto meas_expr = meas(geom_expr);                    // validated
+    auto djacdc = jac(u_trial);                          // validated
+    auto aux_expr = (djacdc * inv_jacs).tr();            // validated
+    auto meas_expr_dx = meas_expr * (aux_expr).trace();  // validated
+    // // reset expression assembler (TODO: Is this necessary?)
+    expr_assembler.clearRhs();
+    expr_assembler.assemble(meas_expr_dx);
+    auto volume_deriv = expr_assembler.rhs();
+    // auto volume_deriv = expression_evaluator.integral(
+    //   meas_expr_dx
+    // );
+    gsInfo << "Derivative is " << volume_deriv << "." << std::flush;
     gsInfo << "\tFinished" << std::endl;
     if (output_to_file) {
       std::ofstream volume_file("volume.out");
