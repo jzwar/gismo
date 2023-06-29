@@ -219,10 +219,8 @@ int main(int argc, char* argv[]) {
       "Compute sensitivities with respect to a given objective distribution",
       compute_sensitivities);
   bool compute_volume{false};
-  cmd.addSwitch(
-      "compute-volume",
-      "Compute volume of the geometry",
-      compute_volume);
+  cmd.addSwitch("compute-volume", "Compute volume of the geometry",
+                compute_volume);
   bool output_to_file{false};
   cmd.addSwitch(
       "output-to-file",
@@ -416,9 +414,7 @@ int main(int argc, char* argv[]) {
     timer.restart();
     // Compute volume of domain
     gsExprEvaluator<> expr_evaluator(expr_assembler);
-    real_t volume_value = expression_evaluator.integral(
-      meas(geom_expr)
-    );
+    real_t volume_value = expression_evaluator.integral(meas(geom_expr));
     gsInfo << "Value is " << volume_value << ", " << std::flush;
     // Compute the derivative of the volume of the domain with respect to the
     // control points
@@ -429,21 +425,14 @@ int main(int argc, char* argv[]) {
     auto djacdc = jac(u_trial);                          // validated
     auto aux_expr = (djacdc * inv_jacs).tr();            // validated
     auto meas_expr_dx = meas_expr * (aux_expr).trace();  // validated
-    // // reset expression assembler (TODO: Is this necessary?)
-    expr_assembler.clearRhs();
-    expr_assembler.assemble(meas_expr_dx);
-    auto volume_deriv = expr_assembler.rhs();
-    // auto volume_deriv = expression_evaluator.integral(
-    //   meas_expr_dx
-    // );
-    gsInfo << "Derivative is " << volume_deriv << "." << std::flush;
-    gsInfo << "\tFinished" << std::endl;
+    // Output data to file
     if (output_to_file) {
       std::ofstream volume_file("volume.out");
       volume_file << std::setprecision(25) << volume_value;
       volume_file.close();
       volume_time += timer.stop();
     }
+    gsInfo << "\tFinished" << std::endl;
   }
 
   ////////////////////////////////////////////////////
@@ -607,6 +596,36 @@ int main(int argc, char* argv[]) {
                          << std::flush;
         sensitivity_file.close();
       }
+
+      // reset expression assembler (TODO: Is this necessary?)
+      if (compute_volume) {
+        expr_assembler.clearRhs();
+        expr_assembler.assemble(meas_expr_dx.tr());
+        auto volume_deriv = expr_assembler.rhs();
+        // Scale the ctps-wise volume derivative with the parameter
+        // sensitivities
+        // std::cout << "volume_deriv\nRows : " << volume_deriv.rows()
+        //           << "\nCols : " << volume_deriv.cols() << std::endl;
+        // std::cout << "parameter_sensitivity\nRows : "
+        //           << parameter_sensitivity.rows()
+        //           << "\nCols : " << parameter_sensitivity.cols() <<
+        //           std::endl;
+
+        const gsMatrix<> volume_sensitivities_param =
+            volume_deriv.transpose() * parameter_sensitivity;
+
+        // Output to file
+        if (output_to_file) {
+          std::ofstream v_sensitivity_file("volume_sensitivities.out");
+          v_sensitivity_file << std::setprecision(25)
+                             << volume_sensitivities_param << std::flush;
+          v_sensitivity_file.close();
+        }
+
+        gsInfo << "Derivative is " << volume_sensitivities_param << "."
+               << std::flush;
+      }
+      gsInfo << "\tFinished" << std::endl;
     }
   }
 
