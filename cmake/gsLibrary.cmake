@@ -135,6 +135,14 @@ if( WIN32 ) # Copy the dll to the bin folder to allow executables to find it
     endif()
 endif( WIN32 )
 
+# explicitly add cmake cxx flags so it can properly propagate to linked projects
+# this is especially relavant in release mode, where architecture specific
+# optimization flags are used.
+#
+# populate interface flags to avoid duplicating flags
+string(REPLACE " " ";" GISMO_CXX_FLAGS_LIST ${CMAKE_CXX_FLAGS})
+target_compile_options(${PROJECT_NAME} INTERFACE ${GISMO_CXX_FLAGS_LIST})
+
 endif(GISMO_BUILD_LIB)
 
   add_library(${PROJECT_NAME}_static STATIC
