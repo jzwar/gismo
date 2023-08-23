@@ -334,11 +334,10 @@ template<class T>
 void getFunctionFromXml ( gsXmlNode * node, gsFunctionExpr<T> & result );
 
 /// Helper to fetch matrices
-template<class T>
-void getMatrixFromXml ( gsXmlNode * node,
-                        unsigned const & rows,
-                        unsigned const & cols,
-                        gsMatrix<T> & result );
+template <class T>
+void getMatrixFromXml(gsXmlNode* node, unsigned const& rows,
+                      unsigned const& cols, gsMatrix<T>& result,
+                      const std::string& base_type_flag = "ASCII");
 
 /// Helper to insert matrices into XML
 template<class T>
