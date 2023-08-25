@@ -92,14 +92,16 @@ Object * getRationalBasisFromXml ( gsXmlNode * node)
     // Read source basis
     gsXmlNode * tmp = node->first_node("Basis");
     typename Object::SourceBasis * src = gsXml<typename Object::SourceBasis>::get(tmp) ;
-       
+
     // Read weights
     tmp = node->first_node("weights");
-    gsMatrix<typename Object::Scalar_t>   weights;
-    getMatrixFromXml<typename Object::Scalar_t>( tmp, src->size(), 1, weights);
-    return new Object( src, give(weights) );
+    gsMatrix<typename Object::Scalar_t> weights;
+    gsXmlAttribute* format = tmp->first_attribute("format");
+    std::string format_flag = format ? format->value() : "ASCII";
+    getMatrixFromXml<typename Object::Scalar_t>(tmp, src->size(), 1, weights,
+                                                format_flag);
+    return new Object(src, give(weights));
 }
-
 
 template<class Object>
 Object * getHTensorBasisFromXml ( gsXmlNode * node)
@@ -283,15 +285,19 @@ Object * getGeometryFromXml ( gsXmlNode * node)
 
     //gsWarn<<"Read mat "<< b->size()<<"x"<< geoDim <<"\n";
 
-    gsMatrix<typename Object::Scalar_t> c; 
-    getMatrixFromXml<typename Object::Scalar_t>( tmp, b->size(), geoDim, c );
+    // Read the Coefficients and store them in a matrix
+    gsMatrix<typename Object::Scalar_t> coefficient_matrix;
+    gsXmlAttribute* format = tmp->first_attribute("format");
+    std::string format_flag = format ? format->value() : "ASCII";
+    getMatrixFromXml<typename Object::Scalar_t>(
+        tmp, b->size(), geoDim, coefficient_matrix, format_flag);
 
-    gsXmlAttribute * coef_order = tmp->first_attribute("order");
-    if ( nullptr != coef_order )
-        if ( !strcmp( coef_order->value(),"coordinates") )
-        {
-            c.transposeInPlace();
-            c.resize(b->size(),geoDim);
+
+    gsXmlAttribute* coef_order = tmp->first_attribute("order");
+    if (nullptr != coef_order)
+        if (!strcmp(coef_order->value(), "coordinates")) {
+            coefficient_matrix.transposeInPlace();
+            coefficient_matrix.resize(b->size(), geoDim);
         }
 
     // Looking for transformations
@@ -307,7 +313,7 @@ Object * getGeometryFromXml ( gsXmlNode * node)
             if (val == "translation")
             {
                 getMatrixFromXml<typename Object::Scalar_t>(tmp, 3, 1 ,a);
-                // c->rowwise() += a->transpose(); // TO DO
+                // coefficient_matrix->rowwise() += a->transpose(); // TO DO
             }
             if (val ==  "rotation" ) // 3d
             {
@@ -315,7 +321,7 @@ Object * getGeometryFromXml ( gsXmlNode * node)
                 gsEigen::Transform<typename Object::Scalar_t,3,gsEigen::Affine> 
                     rot( gsEigen::AngleAxis<typename Object::Scalar_t> 
                          ( a(3,0), a.template block<3,1>(0,0).normalized() ) );
-                c = (c. rowwise().homogeneous() * 
+                coefficient_matrix = (coefficient_matrix. rowwise().homogeneous() * 
                      rot.matrix().transpose() ).leftCols(3) ;
 
             }
@@ -330,7 +336,7 @@ Object * getGeometryFromXml ( gsXmlNode * node)
         }
     }
 
-    Object * result = new Object(*b,c);
+    Object * result = new Object(*b,coefficient_matrix);
     return result;
 }
 
