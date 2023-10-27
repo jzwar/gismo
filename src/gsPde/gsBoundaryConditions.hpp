@@ -13,7 +13,9 @@
 
 #include <gsIO/gsXml.h>
 #include <gsCore/gsFunctionExpr.h>
+#include <gsCore/gsConstantFunction.h>
 #include <gsUtils/gsSortedVector.h>
+#include <gsIO/gsXmlGenericUtils.hpp>
 
 namespace gismo
 {
@@ -258,7 +260,7 @@ public:
         typedef typename std::vector<typename gsFunctionSet<T>::Ptr>::const_iterator fun_it;
         for (fun_it fit = fun.begin(); fit != fun.end(); ++fit)
         {
-            gsXmlNode * ff = putFunctionToXml(*fit, data, count);
+            gsXmlNode * ff = putFunctionToXml<T>(*fit, data, count);
             BCs->append_node(ff);
             ++count;
         }
@@ -299,6 +301,9 @@ public:
                     {
                         gsXmlAttribute * unknownNode = internal::makeAttribute(
                                 "unknown", b.m_unknown, data);
+                        gsXmlAttribute * componentNode = internal::makeAttribute("component",
+                                b.unkComponent(), data);
+                        bcNode->append_attribute(componentNode);
                         bcNode->append_attribute(unknownNode);
                         first = false;
                     }
@@ -341,52 +346,6 @@ public:
         }
         return BCs;
     }
-
-private:
-    static gsXmlNode * putFunctionToXml(
-            const typename gsFunctionSet<T>::Ptr & obj, gsXmlTree & data,
-            int index)
-    {
-        gsXmlNode * result = internal::makeNode("Function", data);
-        if (typeid(*obj) == typeid(gsFunctionExpr<T> ))
-        {
-            gsFunctionExpr<T> * ptr2 =
-                    dynamic_cast<gsFunctionExpr<T> *>(obj.get());
-            result = putFunctionExprToXml(*ptr2, result, data);
-        }
-        gsXmlAttribute * indexNode = internal::makeAttribute("index", index,
-                data);
-        result->append_attribute(indexNode);
-        return result;
-    }
-
-    static gsXmlNode * putFunctionExprToXml(const gsFunctionExpr<T> & obj,
-            gsXmlNode * result, gsXmlTree & data)
-    {
-        std::string typeStr = gsXml<gsFunctionExpr<T> >::type();
-        gsXmlAttribute * type = internal::makeAttribute("type", typeStr, data);
-        result->append_attribute(type);
-        gsXmlAttribute * dim = internal::makeAttribute("dim", obj.domainDim(),
-                data);
-        result->append_attribute(dim);
-        // set value
-        const short_t tdim = obj.targetDim();
-        if ( tdim == 1)
-        {
-            result->value( makeValue(obj.expression(), data) );
-        }
-        else
-        {
-            gsXmlNode * cnode;
-            for (short_t c = 0; c!=tdim; ++c)
-            {
-                cnode = makeNode("c", obj.expression(c), data);
-                result->append_node(cnode);
-            }
-        }
-        return result;
-    }
-
 };
 
 } // end namespace internal
