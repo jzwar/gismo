@@ -2665,7 +2665,7 @@ public:
     }
 
 public:
-    enum {Space= 0, ScalarValued= 1, ColBlocks= 0};
+    enum {Space= E::Space, ScalarValued= 1, ColBlocks= 0};
 
     Scalar eval(const index_t k) const { return eval_impl(_u,k); }
 
@@ -2859,51 +2859,59 @@ public:
 
   It returns a matrix with the gradient of u in row d.
 */
-template<class E>
-class dJacdc_expr : public _expr<dJacdc_expr<E> >
-{
-    typename E::Nested_t _u;
-public:
-    enum{ Space = E::Space, ScalarValued = 0, ColBlocks = (1==E::Space?1:0)};
+template <class E>
+class dJacdc_expr : public _expr<dJacdc_expr<E>> {
+  typename E::Nested_t _u;
 
-    typedef typename E::Scalar Scalar;
+ public:
+  enum {
+    Space = E::Space,
+    ScalarValued = 0,
+    ColBlocks = (1 == E::Space ? 1 : 0)
+  };
 
-    mutable gsMatrix<Scalar> res;
-    index_t _c;
+  typedef typename E::Scalar Scalar;
 
-    dJacdc_expr(const E & u, index_t c) : _u(u), _c(c)
-    { GISMO_ASSERT(1==u.dim(),"grad(.) requires 1D variable, use jac(.) instead.");}
+  mutable gsMatrix<Scalar> res;
+  index_t _c;
 
-    const gsMatrix<Scalar> & eval(const index_t k) const
-    {
-        index_t dd = _u.source().domainDim();
-        index_t n = _u.rows();
-        res.setZero(dd, dd*n);
+  dJacdc_expr(const E& u, index_t c) : _u(u), _c(c) {
+    GISMO_ASSERT(1 == u.dim(),
+                 "grad(.) requires 1D variable, use jac(.) instead.");
+  }
 
-        gsMatrix<Scalar> grad = _u.data().values[1].reshapeCol(k, dd, n);
-        for(index_t i = 0; i < n; i++){
-            res.row(_c).segment(i*dd,dd) = grad.col(i);
-        }
-        return res;
+  const gsMatrix<Scalar>& eval(const index_t k) const {
+    index_t dd = _u.source().domainDim();
+    index_t n = _u.cardinality();
+    res.setZero(dd, dd * n);
+
+    gsMatrix<Scalar> grad = _u.data().values[1].reshapeCol(k, dd, n);
+    for (index_t i = 0; i < n; i++) {
+      res.row(_c).segment(i * dd, dd) = grad.col(i);
     }
+    return res;
+  }
 
-    index_t rows() const { return _u.source().domainDim(); }
+  index_t rows() const { return _u.source().domainDim(); }
 
-    index_t cols() const { return _u.source().domainDim()*_u.rows(); }
+  index_t cols() const { return _u.source().domainDim() * _u.rows(); }
 
-    void parse(gsExprHelper<Scalar> & evList) const
-    {
-        evList.add(_u);
-        _u.data().flags |= NEED_GRAD;
-    }
+  index_t cardinality_impl() const { return _u.cardinality_impl(); }
 
-    const gsFeSpace<Scalar> & rowVar() const { return _u.rowVar(); }
-    const gsFeSpace<Scalar> & colVar() const
-    {return gsNullExpr<Scalar>::get();}
+  void parse(gsExprHelper<Scalar>& evList) const {
+    evList.add(_u);
+    _u.data().flags |= NEED_GRAD;
+  }
 
-    void print(std::ostream &os) const { os << "dJacdc("; _u.print(os); os <<")"; }
+  const gsFeSpace<Scalar>& rowVar() const { return _u.rowVar(); }
+  const gsFeSpace<Scalar>& colVar() const { return gsNullExpr<Scalar>::get(); }
+
+  void print(std::ostream& os) const {
+    os << "dJacdc(";
+    _u.print(os);
+    os << ")";
+  }
 };
-
 
 /*
   Expression for the nabla (\f$\nabla\f$) of a finite element variable,
@@ -3702,47 +3710,47 @@ public:
 template <typename E1, typename E2>
 class mult_expr<E1,E2,false> : public _expr<mult_expr<E1, E2, false> >
 {
-    typename E1::Nested_t _u;
-    typename E2::Nested_t _v;
+  typename E1::Nested_t _u;
+  typename E2::Nested_t _v;
 
-public:
-    enum {ScalarValued = E1::ScalarValued && E2::ScalarValued,
-        ColBlocks = E2::ColBlocks};
-    enum {Space = (int)E1::Space + (int)E2::Space };
+ public:
+  enum {ScalarValued = E1::ScalarValued && E2::ScalarValued,
+    ColBlocks = E2::ColBlocks};
+  enum {Space = (int)E1::Space + (int)E2::Space };
 
-    typedef typename E1::Scalar Scalar;
+  typedef typename E1::Scalar Scalar;
 
-    mult_expr(_expr<E1> const& u,
+  mult_expr(_expr<E1> const& u,
               _expr<E2> const& v)
     : _u(u), _v(v) { }
 
-    mutable Temporary_t tmp;
-    const Temporary_t & eval(const index_t k) const
+  mutable Temporary_t tmp;
+  const Temporary_t & eval(const index_t k) const
     {
-        GISMO_ASSERT(0==_u.cols()*_v.rows() || _u.cols() == _v.rows(),
-                     "Wrong dimensions "<<_u.cols()<<"!="<<_v.rows()<<" in * operation:\n"
-                     << _u <<" times \n" << _v );
+    GISMO_ASSERT(0==_u.cols()*_v.rows() || _u.cols() == _v.rows(),
+                 "Wrong dimensions "<<_u.cols()<<"!="<<_v.rows()<<" in * operation:\n"
+                                     << _u <<" times \n" << _v );
 
-        // Note: a * b * c --> (a*b).eval()*c
-        tmp = _u.eval(k) * _v.eval(k);
+    // Note: a * b * c --> (a*b).eval()*c
+    tmp = _u.eval(k) * _v.eval(k);
         return tmp; // assumes result is not scalarvalued
     }
 
-    index_t rows() const { return E1::ScalarValued ? _v.rows()  : _u.rows(); }
-    index_t cols() const { return E2::ScalarValued ? _u.cols()  : _v.cols(); }
-    void parse(gsExprHelper<Scalar> & evList) const
+  index_t rows() const { return E1::ScalarValued ? _v.rows()  : _u.rows(); }
+  index_t cols() const { return E2::ScalarValued ? _u.cols()  : _v.cols(); }
+void parse(gsExprHelper<Scalar> & evList) const
     { _u.parse(evList); _v.parse(evList); }
 
 
-    index_t cardinality_impl() const
+  index_t cardinality_impl() const
     { return 0==E1::Space ? _v.cardinality(): _u.cardinality(); }
 
-    const gsFeSpace<Scalar> & rowVar() const
+  const gsFeSpace<Scalar> & rowVar() const
     { return 0==E1::Space ? _v.rowVar() : _u.rowVar(); }
-    const gsFeSpace<Scalar> & colVar() const
+  const gsFeSpace<Scalar> & colVar() const
     { return 0==E2::Space ? _u.colVar() : _v.colVar(); }
 
-    void print(std::ostream &os) const { _u.print(os); os<<"*"; _v.print(os); }
+  void print(std::ostream &os) const { _u.print(os); os<<"*"; _v.print(os); }
 };
 
 /*
